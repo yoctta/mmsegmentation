@@ -39,7 +39,7 @@ _segmentor=dict(
     pretrained=None,
     backbone=_segmentor_backbone,
     neck=_neck,
-    decoder_head=_decode_head
+    decode_head=_decode_head
 )
 
 

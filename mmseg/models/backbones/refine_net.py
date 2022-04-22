@@ -33,14 +33,14 @@ class SegEncoder(nn.Module):
         self.bn2=nn.BatchNorm2d(out_dim)
         self.conv3=nn.Conv2d(dim,out_dim,5,padding=2)
         self.bn3=nn.BatchNorm2d(out_dim)
-        self.conv4=nn.Conv2d(3*dim,dim,1)
+        self.conv4=nn.Conv2d(3*out_dim,out_dim,1)
         self.dropout=nn.Dropout2d(p_drop)
         self.act=nn.GELU()
     def forward(self,seg_logits):
         x1=self.act(self.bn1(self.conv1(seg_logits)))
         x2=self.act(self.bn2(self.conv2(seg_logits)))
         x3=self.act(self.bn3(self.conv3(seg_logits)))
-        n=self.dropout(self.conv4(self.cat([x1,x2,x3],1)))
+        n=self.dropout(self.conv4(torch.cat([x1,x2,x3],1)))
         return tuple([n.clone() for i in range(4)])
 
 @BACKBONES.register_module()
@@ -51,20 +51,20 @@ class Refine(BaseModule):
                 ref_seg_encoder,
                 mixer):
         super(Refine, self).__init__()
-        ref_segmentor=BACKBONES.build_backbone(ref_segmentor).eval()
+        ref_segmentor=BACKBONES.build(ref_segmentor).eval()
         for param in ref_segmentor.parameters():
             param.requires_grad = False
         self.ref_segmentor=ref_segmentor
         self.ref_seg_encoder=SegEncoder(**ref_seg_encoder)
-        self.rel_segmentor=BACKBONES.build_backbone(rel_segmentor)
+        self.rel_segmentor=BACKBONES.build(rel_segmentor)
         self.mixer_conv=nn.ModuleList([nn.Conv2d(i[0]+i[1],i[2],1,bias=False) for i in mixer['dims']])
-        self.mixer_LN1=nn.ModuleList([nn.LayerNorm(i[0]) for i in mixer['dims']])
-        self.mixer_LN2=nn.ModuleList([nn.LayerNorm(i[1]) for i in mixer['dims']])
+        self.mixer_LN1=nn.ModuleList([nn.BatchNorm2d(i[0]) for i in mixer['dims']])
+        self.mixer_LN2=nn.ModuleList([nn.BatchNorm2d(i[1]) for i in mixer['dims']])
 
 
     def forward(self, inputs):
         with torch.no_grad():
-            ref_logits=torch.softmax(self.ref_segmentor(inputs),dim=1)
+            ref_logits=torch.softmax(self.ref_segmentor.encode_decode(inputs,None),dim=1)
         features1=self.rel_segmentor(inputs)
         features2=self.ref_seg_encoder(ref_logits)
         features=[]
