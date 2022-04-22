@@ -1,6 +1,6 @@
 from copy import deepcopy
 norm_cfg = dict(type='SyncBN', requires_grad=True)
-_beit_init=dict(type='Pretrained', checkpoint='pretrain/beit_peco_fine_800.pth')
+_beit_init=dict(type='Pretrained', checkpoint='pretrain/upernet_beit-base_8x2_640x640_160k_ade20k-eead221d.pth')
 _segmentor_backbone=dict(
         type='BEiT',
         init_cfg = None,
