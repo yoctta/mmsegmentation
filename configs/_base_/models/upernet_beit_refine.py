@@ -1,7 +1,9 @@
+from copy import deepcopy
 norm_cfg = dict(type='SyncBN', requires_grad=True)
+_beit_init=dict(type='Pretrained', checkpoint='pretrain/beit_peco_fine_800.pth')
 _segmentor_backbone=dict(
         type='BEiT',
-        init_cfg = dict(type='Pretrained', checkpoint='pretrain/beit_peco_fine_800.pth'),
+        init_cfg = None,
         img_size=(640, 640),
         patch_size=16,
         in_channels=3,
@@ -36,13 +38,14 @@ _decode_head=dict(
 
 _segmentor=dict(
     type='EncoderDecoder',
-    pretrained=None,
+    pretrained='pretrain/upernet_beit-base_8x2_640x640_160k_ade20k-eead221d.pth',
     backbone=_segmentor_backbone,
     neck=_neck,
     decode_head=_decode_head
 )
 
-
+_segmentor_backbone2=deepcopy(_segmentor_backbone)
+_segmentor_backbone2['init_cfg']=_beit_init
 
 model = dict(
     type='EncoderDecoder',
@@ -50,7 +53,7 @@ model = dict(
     backbone=dict(
         type="Refine",
         ref_segmentor=_segmentor,
-        rel_segmentor=_segmentor_backbone,
+        rel_segmentor=_segmentor_backbone2,
         ref_seg_encoder=dict(dim=150,out_dim=256,p_drop=0.5),
         mixer=dict(dims=[[768,256,768],[768,256,768],[768,256,768],[768,256,768]])),
     neck=_neck,
