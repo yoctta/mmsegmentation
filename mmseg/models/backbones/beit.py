@@ -426,7 +426,7 @@ class BEiT(BaseModule):
             state_dict = checkpoint['state_dict']
         else:
             state_dict = checkpoint
-
+        state_dict={(i[9:] if i.startswith('backbone') else i):state_dict[i] for i in state_dict}
         all_keys = list(state_dict.keys())
         for key in all_keys:
             if 'relative_position_index' in key:
