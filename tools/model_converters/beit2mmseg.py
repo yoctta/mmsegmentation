@@ -16,12 +16,13 @@ def convert_beit(ckpt):
         is_bkb=True
         ckpt_p1={i[9:]:ckpt[i] for i in ckpt if i.startswith('backbone')}
         ckpt_p2={i:ckpt[i] for i in ckpt if not i.startswith('backbone')}
+    print(len(ckpt.keys()),len(ckpt_p1.keys()),len(ckpt_p2.keys()))
     for k, v in ckpt_p1.items():
         if k.startswith('patch_embed'):
             print("convert ",k)
             new_key = k.replace('patch_embed.proj', 'patch_embed.projection')
             new_ckpt[new_key] = v
-        if k.startswith('blocks'):
+        elif k.startswith('blocks'):
             print("convert ",k)
             new_key = k.replace('blocks', 'layers')
             if 'norm' in new_key:
