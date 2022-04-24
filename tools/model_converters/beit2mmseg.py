@@ -16,12 +16,14 @@ def convert_beit(ckpt):
         is_bkb=True
         ckpt_p1={i[9:]:ckpt[i] for i in ckpt if i.startswith('backbone')}
         ckpt_p2={i:ckpt[i] for i in ckpt if not i.startswith('backbone')}
+    else:
+        ckpt_p1=ckpt
+        ckpt_p2={}
     print(len(ckpt.keys()),len(ckpt_p1.keys()),len(ckpt_p2.keys()))
     for k, v in ckpt_p1.items():
         if k.startswith('patch_embed'):
             print("convert ",k)
             new_key = k.replace('patch_embed.proj', 'patch_embed.projection')
-            new_ckpt[new_key] = v
         elif k.startswith('blocks'):
             print("convert ",k)
             new_key = k.replace('blocks', 'layers')
@@ -31,12 +33,16 @@ def convert_beit(ckpt):
                 new_key = new_key.replace('mlp.fc1', 'ffn.layers.0.0')
             elif 'mlp.fc2' in new_key:
                 new_key = new_key.replace('mlp.fc2', 'ffn.layers.1')
-            new_ckpt[new_key] = v
+        elif k.startswith('fpn1'):
+            new_key = k.replace('fpn1', 'neck.upsample_4x')
+        elif k.startswith('fpn2'):
+            new_key = k.replace('fpn2', 'neck.upsample_2x')
         else:
             new_key = k
-            new_ckpt[new_key] = v
+        if not new_key.startswith('neck') and is_bkb:
+            new_key="backbone."+new_key
+        new_ckpt[new_key] = v
     if is_bkb:
-        new_ckpt = OrderedDict({'backbone.'+i:new_ckpt[i] for i in new_ckpt})
         for i in ckpt_p2:
             new_ckpt[i]=ckpt_p2[i]
     return new_ckpt
