@@ -38,18 +38,18 @@ _decode_head=dict(
 
 _segmentor=dict(
     type='EncoderDecoder',
-    pretrained='pretrain/peco_800/iter_160000.pth',
+    init_cfg=_beit_init,
     backbone=_segmentor_backbone,
     neck=_neck,
     decode_head=_decode_head
 )
 
 _segmentor_backbone2=deepcopy(_segmentor_backbone)
-_segmentor_backbone2['init_cfg']=_beit_init
+#_segmentor_backbone2['init_cfg']=_beit_init
 
 model = dict(
     type='EncoderDecoder',
-    pretrained=None,
+    init_cfg=_beit_init,
     backbone=dict(
         type="Refine",
         ref_segmentor=_segmentor,

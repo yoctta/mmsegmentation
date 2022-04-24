@@ -4,7 +4,7 @@ _base_ = [
 ]
 
 model = dict(
-    pretrained='pretrain/peco_800/iter_160000.pth',
+    init_cfg=dict(type='Pretrained', checkpoint='pretrain/peco_800/iter_160000.pth'),
     test_cfg=dict(mode='slide', crop_size=(512, 512), stride=(426, 426)),
     backbone=dict(
         img_size=(512, 512)
