@@ -14,8 +14,8 @@ def convert_beit(ckpt):
     if 'backbone.blocks.0.attn.relative_position_bias_table' in ckpt.keys():
         print("is backbone")
         is_bkb=True
-        ckpt={i[9:]:ckpt[i] for i in ckpt if i.startswith['backbone']}
-        ckpt_p2={i:ckpt[i] for i in ckpt if not i.startswith['backbone']}
+        ckpt={i[9:]:ckpt[i] for i in ckpt if i.startswith('backbone')}
+        ckpt_p2={i:ckpt[i] for i in ckpt if not i.startswith('backbone')}
     for k, v in ckpt.items():
         if k.startswith('patch_embed'):
             print("convert ",k)
