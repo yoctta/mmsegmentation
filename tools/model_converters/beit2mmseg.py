@@ -10,7 +10,11 @@ from mmcv.runner import CheckpointLoader
 
 def convert_beit(ckpt):
     new_ckpt = OrderedDict()
-
+    is_bkb=False
+    if 'backbone.blocks.0.attn.relative_position_bias_talbe' in ckpt.keys():
+        is_bkb=True
+        ckpt={i[9:]:ckpt[i] for i in ckpt if i.startswith['backbone']}
+        ckpt_p2={i:ckpt[i] for i in ckpt if not i.startswith['backbone']}
     for k, v in ckpt.items():
         if k.startswith('patch_embed'):
             new_key = k.replace('patch_embed.proj', 'patch_embed.projection')
@@ -27,7 +31,10 @@ def convert_beit(ckpt):
         else:
             new_key = k
             new_ckpt[new_key] = v
-
+    if is_bkb:
+        new_ckpt = OrderedDict({'backbone.'+i:new_ckpt[i] for i in new_ckpt})
+        for i in ckpt_p2:
+            new_ckpt[i]=ckpt_p2[i]
     return new_ckpt
 
 
