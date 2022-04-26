@@ -7,6 +7,7 @@ model = dict(
     type='DiffusionEncoderDecoder',
     image_backbone=dict(
         type='BEiT',
+        init_cfg=dict(type='Pretrained', checkpoint='pretrain/peco_800/iter_160000.pth'),
         img_size=(512, 512),
         patch_size=16,
         in_channels=3,
