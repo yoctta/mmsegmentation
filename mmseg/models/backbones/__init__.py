@@ -20,11 +20,12 @@ from .twins import PCPVT, SVT
 from .unet import UNet
 from .vit import VisionTransformer
 from .refine_net import Refine
+from .mask_encoder_trans import MaskEncoderTrans
 
 __all__ = [
     'ResNet', 'ResNetV1c', 'ResNetV1d', 'ResNeXt', 'HRNet', 'FastSCNN',
     'ResNeSt', 'MobileNetV2', 'UNet', 'CGNet', 'MobileNetV3',
     'VisionTransformer', 'SwinTransformer', 'MixVisionTransformer',
     'BiSeNetV1', 'BiSeNetV2', 'ICNet', 'TIMMBackbone', 'ERFNet', 'PCPVT',
-    'SVT', 'STDCNet', 'STDCContextPathNet', 'BEiT', 'Refine'
+    'SVT', 'STDCNet', 'STDCContextPathNet', 'BEiT', 'Refine', 'MaskEncoderTrans'
 ]
