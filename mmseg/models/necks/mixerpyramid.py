@@ -4,7 +4,7 @@ from mmcv.cnn import build_norm_layer
 import torch
 import math
 from ..builder import NECKS
-
+from .featurepyramid import Feature2Pyramid
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, num_steps, dim, rescale_steps=4000):
         super().__init__()
@@ -24,27 +24,34 @@ class SinusoidalPosEmb(nn.Module):
 
 class AdaNorm(nn.Module):
     def __init__(self, n_embd, diffusion_step, emb_type="adalayernorm_abs"):
-        super().__init__()
-        if "abs" in emb_type:
-            self.emb = SinusoidalPosEmb(diffusion_step, n_embd)
-        else:
-            self.emb = nn.Embedding(diffusion_step, n_embd)
-        self.linear = nn.Linear(n_embd, n_embd*2)
         self.emb_type=emb_type
+        super().__init__()
+        affine=True
+        if emb_type.startswith('ada') and diffusion_step>0:
+            affine=False
+            if "abs" in emb_type:
+                self.emb = SinusoidalPosEmb(diffusion_step, n_embd)
+            else:
+                self.emb = nn.Embedding(diffusion_step, n_embd)
+            self.linear = nn.Linear(n_embd, n_embd*2)
         if 'layernorm' in self.emb_type:
-            self.norm = nn.LayerNorm(n_embd, elementwise_affine=False)
+            self.norm = nn.LayerNorm(n_embd, elementwise_affine=affine)
         if 'batchnorm' in self.emb_type:
-            self.norm = nn.SyncBatchNorm(n_embd,affine=False)
+            self.norm = nn.SyncBatchNorm(n_embd,affine=affine)
 
 
-    def forward(self, x, timestep):
-        emb = self.linear(self.emb(timestep))
-        if len(emb.shape)==3:
-            emb=emb.unsqueeze(1)
-            scale, shift = torch.chunk(emb, 2, dim=2)
-        if len(emb.shape)==4:
-            emb=emb.unsqueeze(-1).unsqueeze(-1)
-            scale, shift = torch.chunk(emb, 2, dim=1)
+    def forward(self, x, timestep=None):
+        if hasattr(self,'emb'):
+            emb = self.linear(self.emb(timestep))
+            if len(emb.shape)==3:
+                emb=emb.unsqueeze(1)
+                scale, shift = torch.chunk(emb, 2, dim=2)
+            if len(emb.shape)==4:
+                emb=emb.unsqueeze(-1).unsqueeze(-1)
+                scale, shift = torch.chunk(emb, 2, dim=1)
+        else:
+            scale=0
+            shift=0
         x = self.norm(x) * (1 + scale) + shift
         return x
 
@@ -68,108 +75,36 @@ class MixerPyramid(nn.Module):
                  mask_feature_dim,
                  embed_dim,
                  diffusion_step,
-                 rescales=[4, 2, 1, 0.5],
-                 norm_cfg=dict(type='SyncBN', requires_grad=True)):
+                 rescales=[4, 2, 1, 0.5]):
         super().__init__()
+        self.featurepyramid=Feature2Pyramid(embed_dim,rescales)
         self.image_convs=nn.ModuleList([nn.Conv2d(image_feature_dim,embed_dim,3,padding=1) for i in range(4)])
         self.mask_convs=nn.ModuleList([nn.Conv2d(mask_feature_dim,embed_dim,3,padding=1) for i in range(4)])
         self.image_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
         self.mask_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
-        self.rescales = rescales
-        self.upsample_4x = None
-        for k in self.rescales:
-            if k == 4:
-                self.upsample_4x = nn.Sequential(
-                    nn.ConvTranspose2d(
-                        embed_dim, embed_dim, kernel_size=2, stride=2),
-                    build_norm_layer(norm_cfg, embed_dim)[1],
-                    nn.GELU(),
-                    nn.ConvTranspose2d(
-                        embed_dim, embed_dim, kernel_size=2, stride=2),
-                )
-            elif k == 2:
-                self.upsample_2x = nn.Sequential(
-                    nn.ConvTranspose2d(
-                        embed_dim, embed_dim, kernel_size=2, stride=2))
-            elif k == 1:
-                self.identity = nn.Identity()
-            elif k == 0.5:
-                self.downsample_2x = nn.MaxPool2d(kernel_size=2, stride=2)
-            elif k == 0.25:
-                self.downsample_4x = nn.MaxPool2d(kernel_size=4, stride=4)
-            else:
-                raise KeyError(f'invalid {k} for feature2pyramid')
 
-    def forward(self, image_features, mask_features, t):
-        assert len(image_features) == len(self.rescales)
+    def forward(self, image_features, mask_features, t=None):
         outputs = []
-        if self.upsample_4x is not None:
-            ops = [
-                self.upsample_4x, self.upsample_2x, self.identity,
-                self.downsample_2x
-            ]
-        else:
-            ops = [
-                self.upsample_2x, self.identity, self.downsample_2x,
-                self.downsample_4x
-            ]
         for i in range(len(image_features)):
-            outputs.append(ops[i](self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t)))
-        return tuple(outputs)
+            outputs.append(self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t))
+        return tuple(self.featurepyramid(outputs))
 
 
 @NECKS.register_module()
-class MixCrossAttn(nn.Module):
+class MixerPyramid2(nn.Module):
     def __init__(self,
                  image_feature_dim,
-                 mask_feature_dim,
+                 mask_feature_dims,
                  embed_dim,
-                 diffusion_step,
-                 rescales=[4, 2, 1, 0.5],
-                 norm_cfg=dict(type='SyncBN', requires_grad=True)):
+                 rescales=[4, 2, 1, 0.5]):
         super().__init__()
-        self.image_convs=nn.ModuleList([nn.Conv2d(image_feature_dim,embed_dim,3,padding=1) for i in range(4)])
-        self.mask_convs=nn.ModuleList([nn.Conv2d(mask_feature_dim,embed_dim,3,padding=1) for i in range(4)])
-        self.image_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
-        self.mask_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
-        self.rescales = rescales
-        self.upsample_4x = None
-        for k in self.rescales:
-            if k == 4:
-                self.upsample_4x = nn.Sequential(
-                    nn.ConvTranspose2d(
-                        embed_dim, embed_dim, kernel_size=2, stride=2),
-                    build_norm_layer(norm_cfg, embed_dim)[1],
-                    nn.GELU(),
-                    nn.ConvTranspose2d(
-                        embed_dim, embed_dim, kernel_size=2, stride=2),
-                )
-            elif k == 2:
-                self.upsample_2x = nn.Sequential(
-                    nn.ConvTranspose2d(
-                        embed_dim, embed_dim, kernel_size=2, stride=2))
-            elif k == 1:
-                self.identity = nn.Identity()
-            elif k == 0.5:
-                self.downsample_2x = nn.MaxPool2d(kernel_size=2, stride=2)
-            elif k == 0.25:
-                self.downsample_4x = nn.MaxPool2d(kernel_size=4, stride=4)
-            else:
-                raise KeyError(f'invalid {k} for feature2pyramid')
+        self.featurepyramid=Feature2Pyramid(image_feature_dim,rescales)
+        self.img_mask_convs=nn.ModuleList([nn.Conv2d(image_feature_dim+mask_feature_dims[i],embed_dim,1) for i in range(4)])
 
-    def forward(self, image_features, mask_features, t):
-        assert len(image_features) == len(self.rescales)
+
+    def forward(self, image_features, mask_features, t=None):
+        image_features=self.featurepyramid(image_features)
         outputs = []
-        if self.upsample_4x is not None:
-            ops = [
-                self.upsample_4x, self.upsample_2x, self.identity,
-                self.downsample_2x
-            ]
-        else:
-            ops = [
-                self.upsample_2x, self.identity, self.downsample_2x,
-                self.downsample_4x
-            ]
         for i in range(len(image_features)):
-            outputs.append(ops[i](self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t)))
+            outputs.append(self.img_mask_convs(torch.cat([image_features[i],mask_features[i]],dim=1)))
         return tuple(outputs)

@@ -13,143 +13,16 @@ from mmcv.cnn.utils.weight_init import (constant_init, kaiming_init,
 from mmcv.runner import BaseModule, ModuleList, _load_checkpoint
 from torch.nn.modules.batchnorm import _BatchNorm
 from torch.nn.modules.utils import _pair as to_2tuple
-import math
+from .beit import BEiTAttention
 from mmseg.utils import get_root_logger
 from ..builder import BACKBONES
 from ..utils import PatchEmbed
-
+from ..necks.mixerpyramid import AdaNorm
 try:
     from scipy import interpolate
 except ImportError:
     interpolate = None
 
-class SinusoidalPosEmb(nn.Module):
-    def __init__(self, num_steps, dim, rescale_steps=4000):
-        super().__init__()
-        self.dim = dim
-        self.num_steps = float(num_steps)
-        self.rescale_steps = float(rescale_steps)
-
-    def forward(self, x):
-        x = x / self.num_steps * self.rescale_steps
-        device = x.device
-        half_dim = self.dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
-        emb = x[:, None] * emb[None, :]
-        emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
-        return emb
-
-class AdaNorm(nn.Module):
-    def __init__(self, n_embd, diffusion_step, emb_type="adalayernorm_abs"):
-        super().__init__()
-        if "abs" in emb_type:
-            self.emb = SinusoidalPosEmb(diffusion_step, n_embd)
-        else:
-            self.emb = nn.Embedding(diffusion_step, n_embd)
-        self.linear = nn.Linear(n_embd, n_embd*2)
-        self.emb_type=emb_type
-        if 'layernorm' in self.emb_type:
-            self.norm = nn.LayerNorm(n_embd, elementwise_affine=False)
-        if 'batchnorm' in self.emb_type:
-            self.norm = nn.SyncBatchNorm(n_embd,affine=False)
-
-class BEiTAttention(BaseModule):
-    def __init__(self,
-                 embed_dims,
-                 num_heads,
-                 window_size,
-                 qv_bias=True,
-                 qk_scale=None,
-                 attn_drop_rate=0.,
-                 proj_drop_rate=0.,
-                 init_cfg=None):
-        super().__init__(init_cfg=init_cfg)
-        self.embed_dims = embed_dims
-        self.num_heads = num_heads
-        head_embed_dims = embed_dims // num_heads
-        self.scale = qk_scale or head_embed_dims**-0.5
-        if qv_bias:
-            self.q_bias = nn.Parameter(torch.zeros(embed_dims))
-            self.v_bias = nn.Parameter(torch.zeros(embed_dims))
-        else:
-            self.q_bias = None
-            self.v_bias = None
-
-        self.window_size = window_size
-        # cls to token & token 2 cls & cls to cls
-        self.num_relative_distance = (2 * window_size[0] -
-                                      1) * (2 * window_size[1] - 1) + 3
-        # relative_position_bias_table shape is (2*Wh-1 * 2*Ww-1 + 3, nH)
-        self.relative_position_bias_table = nn.Parameter(
-            torch.zeros(self.num_relative_distance, num_heads))
-
-        # get pair-wise relative position index for
-        # each token inside the window
-        coords_h = torch.arange(window_size[0])
-        coords_w = torch.arange(window_size[1])
-        # coords shape is (2, Wh, Ww)
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))
-        # coords_flatten shape is (2, Wh*Ww)
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = (
-            coords_flatten[:, :, None] - coords_flatten[:, None, :])
-        # relative_coords shape is (Wh*Ww, Wh*Ww, 2)
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
-        # shift to start from 0
-        relative_coords[:, :, 0] += window_size[0] - 1
-        relative_coords[:, :, 1] += window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * window_size[1] - 1
-        relative_position_index = torch.zeros(
-            size=(window_size[0] * window_size[1] + 1, ) * 2,
-            dtype=relative_coords.dtype)
-        # relative_position_index shape is (Wh*Ww, Wh*Ww)
-        relative_position_index[1:, 1:] = relative_coords.sum(-1)
-        relative_position_index[0, 0:] = self.num_relative_distance - 3
-        relative_position_index[0:, 0] = self.num_relative_distance - 2
-        relative_position_index[0, 0] = self.num_relative_distance - 1
-
-        self.register_buffer('relative_position_index',
-                             relative_position_index)
-        self.qkv = nn.Linear(embed_dims, embed_dims * 3, bias=False)
-        self.attn_drop = nn.Dropout(attn_drop_rate)
-        self.proj = nn.Linear(embed_dims, embed_dims)
-        self.proj_drop = nn.Dropout(proj_drop_rate)
-
-    def init_weights(self):
-        trunc_normal_(self.relative_position_bias_table, std=0.02)
-
-    def forward(self, x):
-        """
-        Args:
-            x (tensor): input features with shape of (num_windows*B, N, C).
-        """
-        B, N, C = x.shape
-        qkv_bias = None
-        if self.q_bias is not None:
-            k_bias = torch.zeros_like(self.v_bias, requires_grad=False)
-            qkv_bias = torch.cat((self.q_bias, k_bias, self.v_bias))
-
-        qkv = F.linear(input=x, weight=self.qkv.weight, bias=qkv_bias)
-        qkv = qkv.reshape(B, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
-        q = q * self.scale
-        attn = (q @ k.transpose(-2, -1))
-        if self.relative_position_bias_table is not None:
-            Wh = self.window_size[0]
-            Ww = self.window_size[1]
-            relative_position_bias = self.relative_position_bias_table[
-                self.relative_position_index.view(-1)].view(
-                    Wh * Ww + 1, Wh * Ww + 1, -1)
-            relative_position_bias = relative_position_bias.permute(
-                2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
-            attn = attn + relative_position_bias.unsqueeze(0)
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
 
 
 class TransformerEncoderLayer(BaseModule):
@@ -424,7 +297,7 @@ class MaskEncoderTrans(BaseModule):
                 elif isinstance(m, (_BatchNorm, nn.GroupNorm, nn.LayerNorm)):
                     constant_init(m, val=1.0, bias=0.)
 
-    def forward(self, inputs,t):
+    def forward(self, inputs,t=None):
         B = inputs.shape[0]
         x, hw_shape = self.patch_embed(inputs)
         cls_tokens = self.cls_token.expand(B, -1, -1)

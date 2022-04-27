@@ -55,11 +55,12 @@ class Refine(BaseModule):
         for param in ref_segmentor.parameters():
             param.requires_grad = False
         self.ref_segmentor=ref_segmentor
-        self.ref_seg_encoder=SegEncoder(**ref_seg_encoder)
+        self.ref_seg_encoder=BACKBONES.build(ref_seg_encoder)
         self.rel_segmentor=BACKBONES.build(rel_segmentor)
-        self.mixer_conv=nn.ModuleList([nn.Conv2d(i[0]+i[1],i[2],1,bias=False) for i in mixer['dims']])
-        self.mixer_LN1=nn.ModuleList([nn.BatchNorm2d(i[0]) for i in mixer['dims']])
-        self.mixer_LN2=nn.ModuleList([nn.BatchNorm2d(i[1]) for i in mixer['dims']])
+        # self.mixer_conv=nn.ModuleList([nn.Conv2d(i[0]+i[1],i[2],1,bias=False) for i in mixer['dims']])
+        # self.mixer_LN1=nn.ModuleList([nn.BatchNorm2d(i[0]) for i in mixer['dims']])
+        # self.mixer_LN2=nn.ModuleList([nn.BatchNorm2d(i[1]) for i in mixer['dims']])
+        self.mixer=BACKBONES.build(mixer)
 
 
     def forward(self, inputs):
@@ -67,7 +68,8 @@ class Refine(BaseModule):
             ref_logits=torch.softmax(self.ref_segmentor.encode_decode(inputs,None),dim=1)
         features1=self.rel_segmentor(inputs)
         features2=self.ref_seg_encoder(ref_logits)
-        features=[]
-        for f1,f2,ln1,ln2,conv in zip(features1,features2,self.mixer_LN1,self.mixer_LN2,self.mixer_conv):
-            features.append(conv(torch.cat([ln1(f1),nn.functional.interpolate(ln2(f2),f1.shape[2:],mode="bilinear")],1)))
+        features = self.mixer(features1,features2)
+        # for f1,f2,ln1,ln2,conv in zip(features1,features2,self.mixer_LN1,self.mixer_LN2,self.mixer_conv):
+        #     features.append(conv(torch.cat([ln1(f1),nn.functional.interpolate(ln2(f2),f1.shape[2:],mode="bilinear")],1)))
+        
         return tuple(features)
