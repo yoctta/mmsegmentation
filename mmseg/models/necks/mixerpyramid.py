@@ -74,7 +74,7 @@ class MixerPyramid(nn.Module):
                  image_feature_dim,
                  mask_feature_dim,
                  embed_dim,
-                 diffusion_step,
+                 diffusion_step=0,
                  rescales=[4, 2, 1, 0.5]):
         super().__init__()
         self.featurepyramid=Feature2Pyramid(embed_dim,rescales)

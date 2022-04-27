@@ -164,7 +164,6 @@ class DiffusionSeg(ABC):
 
     def predict_start(self, log_x_t, im, t):          # p(x0|xt)
         x_t = torch.exp(log_x_t)
-        print(x_t.shape)
         if self.amp == True:
             with autocast():
                 out = self._model(im ,x_t, t)
@@ -275,6 +274,7 @@ class DiffusionSeg(ABC):
             raise ValueError
 
     def _train_loss(self, x, im, is_train=True,t=None):                       # get the KL loss
+        print(x.shape)
         b, device = x.size(0), x.device
         x_start = x
         if t is not None:
