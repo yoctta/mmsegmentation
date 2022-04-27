@@ -299,6 +299,7 @@ class MaskEncoderTrans(BaseModule):
 
     def forward(self, inputs,t=None):
         B = inputs.shape[0]
+        print(inputs.shape)
         x, hw_shape = self.patch_embed(inputs)
         cls_tokens = self.cls_token.expand(B, -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
