@@ -163,7 +163,7 @@ class DiffusionSeg(ABC):
         return log_probs
 
     def predict_start(self, log_x_t, im, t):          # p(x0|xt)
-        x_t = log_onehot_to_index(log_x_t)
+        x_t = torch.exp(log_x_t)
         if self.amp == True:
             with autocast():
                 out = self._model(im ,x_t, t)
