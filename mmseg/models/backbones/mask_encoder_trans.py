@@ -67,9 +67,9 @@ class TransformerEncoderLayer(BaseModule):
         self.gamma_2 = nn.Parameter(
             init_values * torch.ones((embed_dims)), requires_grad=True)
 
-    def forward(self, x):
-        x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x)))
-        x = x + self.drop_path(self.gamma_2 * self.ffn(self.norm2(x)))
+    def forward(self, x,t=None):
+        x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x,t)))
+        x = x + self.drop_path(self.gamma_2 * self.ffn(self.norm2(x,t)))
         return x
 
 
