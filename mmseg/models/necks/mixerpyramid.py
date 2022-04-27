@@ -106,5 +106,5 @@ class MixerPyramid2(nn.Module):
         image_features=self.featurepyramid(image_features)
         outputs = []
         for i in range(len(image_features)):
-            outputs.append(self.img_mask_convs(torch.cat([image_features[i],mask_features[i]],dim=1)))
+            outputs.append(self.img_mask_convs[i](torch.cat([image_features[i],mask_features[i]],dim=1)))
         return tuple(outputs)
