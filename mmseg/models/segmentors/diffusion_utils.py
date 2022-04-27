@@ -274,7 +274,6 @@ class DiffusionSeg(ABC):
             raise ValueError
 
     def _train_loss(self, x, im, is_train=True,t=None):                       # get the KL loss
-        print(x.shape)
         b, device = x.size(0), x.device
         x_start = x
         if t is not None:

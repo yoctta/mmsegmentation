@@ -163,7 +163,7 @@ class DiffusionEncoderDecoder(BaseSegmentor,DiffusionSeg):
 
         self.use_cache=True
         losses = dict()
-        loss_decode = self.train_loss(batch=dict(image=img,seg=gt_semantic_seg),return_loss=True)
+        loss_decode = self.train_loss(batch=dict(image=img,seg=gt_semantic_seg.squeeze(1)),return_loss=True)
         losses.update(loss_decode)
         if self.with_auxiliary_head:
             loss_aux = self._auxiliary_head_forward_train(self.cache, img_metas, gt_semantic_seg)
