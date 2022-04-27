@@ -25,6 +25,7 @@ def log_categorical(log_x_start, log_prob):
     return (log_x_start.exp() * log_prob).sum(dim=1)
 
 def index_to_log_onehot(x, num_classes):
+    x=torch.clamp(x,0,num_classes)
     assert x.max().item() < num_classes, \
         f'Error: {x.max().item()} >= {num_classes}'
     x_onehot = F.one_hot(x, num_classes)
