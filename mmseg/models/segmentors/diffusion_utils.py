@@ -173,7 +173,7 @@ class DiffusionSeg(ABC):
         print(x_t.shape)
         assert out.size(0) == x_t.size(0)
         assert out.size(1) == self.num_classes
-        assert out.size()[2:] == x_t.size()[1:]
+        assert out.size()[2:] == x_t.size()[2:]
         log_pred = F.log_softmax(out.double(), dim=1).float()
         batch_size = log_x_t.size()[0]
         #if self.zero_vector is None or self.zero_vector.shape[0] != batch_size:
