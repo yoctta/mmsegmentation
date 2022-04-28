@@ -72,7 +72,7 @@ class DiffusionSeg(ABC):
 
         self.loss_weights=loss_weights
         self.adaptive_auxiliary_loss=adaptive_auxiliary_loss
-        self.num_classes = num_classes+1
+        self.num_classes = num_classes
         self.amp=False
         self.num_timesteps = diffusion_step
         self.parametrization = 'x0'
@@ -80,7 +80,7 @@ class DiffusionSeg(ABC):
         self.t_sampler=t_sampler
 
         if alpha_init_type == "alpha1":
-            at, bt, ct, att, btt, ctt = alpha_schedule(self.num_timesteps,self.num_classes-1, att_1,att_T,ctt_1,ctt_T)
+            at, bt, ct, att, btt, ctt = alpha_schedule(self.num_timesteps,self.num_classes, att_1,att_T,ctt_1,ctt_T)
         else:
             print("alpha_init_type is Wrong !! ")
 
@@ -172,7 +172,7 @@ class DiffusionSeg(ABC):
         print(out.shape)
         print(x_t.shape)
         assert out.size(0) == x_t.size(0)
-        assert out.size(1) == self.num_classes-1
+        assert out.size(1) == self.num_classes
         assert out.size()[2:] == x_t.size()[1:]
         log_pred = F.log_softmax(out.double(), dim=1).float()
         batch_size = log_x_t.size()[0]
@@ -188,7 +188,7 @@ class DiffusionSeg(ABC):
         assert t.min().item() >= 0 and t.max().item() < self.num_timesteps
         batch_size = log_x_start.size()[0]
         onehot_x_t = log_onehot_to_index(log_x_t)
-        mask = (onehot_x_t == self.num_classes-1).unsqueeze(1) 
+        mask = (onehot_x_t == self.num_classes).unsqueeze(1) 
         log_one_vector = torch.zeros(batch_size,1,1,1).type_as(log_x_t)
         log_zero_vector = torch.log(log_one_vector+1.0e-30).expand(-1, -1, log_x_start.shape[2],log_x_start.shape[3])
 
@@ -196,14 +196,14 @@ class DiffusionSeg(ABC):
         # log_qt = torch.cat((log_qt[:,:-1,:], log_zero_vector), dim=1)
         log_qt = log_qt[:,:-1,:]
         log_cumprod_ct = extract(self.log_cumprod_ct, t, log_x_start.shape)         # ct~
-        ct_cumprod_vector = log_cumprod_ct.expand(-1, self.num_classes-1, -1,-1)
+        ct_cumprod_vector = log_cumprod_ct.expand(-1, self.num_classes, -1,-1)
         # ct_cumprod_vector = torch.cat((ct_cumprod_vector, log_one_vector), dim=1)
         log_qt = (~mask)*log_qt + mask*ct_cumprod_vector
 
         log_qt_one_timestep = self.q_pred_one_timestep(log_x_t, t)        # q(xt|xt_1)
         log_qt_one_timestep = torch.cat((log_qt_one_timestep[:,:-1,:], log_zero_vector), dim=1)
         log_ct = extract(self.log_ct, t, log_x_start.shape)         # ct
-        ct_vector = log_ct.expand(-1, self.num_classes-1, -1,-1)
+        ct_vector = log_ct.expand(-1, self.num_classes, -1,-1)
         ct_vector = torch.cat((ct_vector, log_one_vector), dim=1)
         log_qt_one_timestep = (~mask)*log_qt_one_timestep + mask*ct_vector
         
@@ -237,7 +237,7 @@ class DiffusionSeg(ABC):
         uniform = torch.rand_like(logits)
         gumbel_noise = -torch.log(-torch.log(uniform + 1e-30) + 1e-30)
         sample = (gumbel_noise + logits).argmax(dim=1)
-        log_sample = index_to_log_onehot(sample, self.num_classes)
+        log_sample = index_to_log_onehot(sample, self.num_classes+1)
         return log_sample
 
     def q_sample(self, log_x_start, t):                 # diffusion step, q(xt|x0) and sample xt
@@ -282,8 +282,11 @@ class DiffusionSeg(ABC):
             pt=torch.ones(b,device=device)
         else:
             t, pt = self.sample_time(b, device, self.t_sampler)
-        log_x_start = index_to_log_onehot(x_start, self.num_classes)
-        log_xt = self.q_sample(log_x_start=log_x_start, t=t)
+        log_x_start = index_to_log_onehot(x_start, self.num_classes+1)
+        H,W=x.shape[1:]
+        log_x_start_blur=F.interpolate(log_x_start,(H//4,W//4),mode='bilinear',align_corners=self.align_corners)
+        log_x_start_blur=F.interpolate(log_x_start_blur,(H,W),mode='bilinear',align_corners=self.align_corners)
+        log_xt = self.q_sample(log_x_start=log_x_start_blur, t=t)
         # log_xt.data.fill_(-30.0)
         # log_xt[:,150].data.fill_(0.0)
         # xt = log_onehot_to_index(log_xt)
@@ -311,7 +314,7 @@ class DiffusionSeg(ABC):
         # compute log_true_prob now 
         log_true_prob = self.q_posterior(log_x_start=log_x_start, log_x_t=log_xt, t=t)
         kl = self.multinomial_kl(log_true_prob, log_model_prob)  ## kl (B,H,W)
-        #mask_region = (xt == self.num_classes-1).float()
+        #mask_region = (xt == self.num_classes).float()
         mask_region = (x_start == self.ignore_class).float()
         kl = kl * (1-mask_region)
         kl = sum_except_batch(kl)
@@ -394,11 +397,11 @@ class DiffusionSeg(ABC):
         batch_size = image.shape[0] 
         device = self.log_at.device
         if self.log_cumprod_ct[-2]>-1: ## start with all mask !
-            zero_logits = torch.zeros((batch_size, self.num_classes-1, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
+            zero_logits = torch.zeros((batch_size, self.num_classes, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
             one_logits = torch.ones((batch_size, 1, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
         else: ## start with all random !
-            randoms=torch.randint(0,self.num_classes-1,(batch_size,1,image.shape[2]//downsample,image.shape[3]//downsample),device=device)
-            zero_logits = torch.zeros((batch_size, self.num_classes-1,image.shape[2]//downsample,image.shape[3]//downsample),device=device).scatter_(1,randoms,1)
+            randoms=torch.randint(0,self.num_classes,(batch_size,1,image.shape[2]//downsample,image.shape[3]//downsample),device=device)
+            zero_logits = torch.zeros((batch_size, self.num_classes,image.shape[2]//downsample,image.shape[3]//downsample),device=device).scatter_(1,randoms,1)
             one_logits = torch.zeros((batch_size, 1,image.shape[2]//downsample,image.shape[3]//downsample),device=device)
         mask_logits = torch.cat((zero_logits, one_logits), dim=1)
         log_z = torch.log(mask_logits)
