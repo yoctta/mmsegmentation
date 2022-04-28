@@ -82,8 +82,8 @@ class DiffusionEncoderDecoder(BaseSegmentor,DiffusionSeg):
         mask_features=self.mask_backbone(x_t,t)
         mixed_features=self.feature_mixer(image_features,mask_features,t)
         output=self.decode_head(mixed_features)
-        out = resize(
-            input=out,
+        output = resize(
+            input=output,
             size=im.shape[2:],
             mode='bilinear',
             align_corners=self.align_corners)
