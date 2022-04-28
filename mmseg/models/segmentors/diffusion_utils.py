@@ -283,7 +283,7 @@ class DiffusionSeg(ABC):
             t, pt = self.sample_time(b, device, self.t_sampler)
         log_x_start = index_to_log_onehot(x_start, self.num_classes+1)
         H,W=x.shape[1:]
-        log_x_start_blur=einops.rearrenge(F.one_hot(log_x_start,self.num_classes+1),"B H W C -> B C H W").float()
+        log_x_start_blur=einops.rearrange(F.one_hot(log_x_start,self.num_classes+1),"B H W C -> B C H W").float()
         log_x_start_blur=F.interpolate(log_x_start_blur,(H//4,W//4),mode='bilinear',align_corners=self.align_corners)
         log_x_start_blur=F.interpolate(log_x_start_blur,(H,W),mode='bilinear',align_corners=self.align_corners)
         log_x_start_blur = torch.log(log_x_start_blur.clamp(min=1e-30))
