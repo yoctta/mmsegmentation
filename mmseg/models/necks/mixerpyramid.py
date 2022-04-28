@@ -85,6 +85,7 @@ class MixerPyramid(nn.Module):
 
     def forward(self, image_features, mask_features, t=None):
         outputs = []
+        print(len(image_features,mask_features))
         for i in range(len(image_features)):
             outputs.append(self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t))
         return tuple(self.featurepyramid(outputs))
