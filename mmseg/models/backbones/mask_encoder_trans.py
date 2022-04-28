@@ -122,7 +122,7 @@ class MaskEncoderTrans(BaseModule):
                 out_indices = num_layers - 1
             self.out_indices = [out_indices]
         elif isinstance(out_indices, list) or isinstance(out_indices, tuple):
-            self.out_indices = ((i if i>=0 else num_layers+i) for i in out_indices)
+            self.out_indices = [(i if i>=0 else num_layers+i) for i in out_indices]
         else:
             raise TypeError('out_indices must be type of int, list or tuple')
 
