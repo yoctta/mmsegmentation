@@ -347,7 +347,7 @@ class DiffusionSeg(ABC):
             else:
                 addition_loss_weight = 1.0
 
-            loss2 = addition_loss_weight * self.auxiliary_loss_weight * kl_aux_loss / pt
+            loss2 = addition_loss_weight * kl_aux_loss / pt
         vb_loss = self.loss_weights[0]*loss1+ self.loss_weights[1]*loss2
         sums=sum_except_batch((1-mask_region))
         vb_loss=vb_loss/sums
