@@ -169,8 +169,6 @@ class DiffusionSeg(ABC):
                 out = self._model(im ,x_t, t)
         else:
             out = self._model(im, x_t, t)
-        print(out.shape)
-        print(x_t.shape)
         assert out.size(0) == x_t.size(0)
         assert out.size(1) == self.num_classes
         assert out.size()[2:] == x_t.size()[2:]
