@@ -3,6 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
+import einops
 from abc import ABC, abstractmethod
 eps = 1e-8
 
@@ -282,8 +283,10 @@ class DiffusionSeg(ABC):
             t, pt = self.sample_time(b, device, self.t_sampler)
         log_x_start = index_to_log_onehot(x_start, self.num_classes+1)
         H,W=x.shape[1:]
-        log_x_start_blur=F.interpolate(log_x_start,(H//4,W//4),mode='bilinear',align_corners=self.align_corners)
+        log_x_start_blur=einops.rearrenge(F.one_hot(log_x_start,self.num_classes+1),"B H W C -> B C H W").float()
+        log_x_start_blur=F.interpolate(log_x_start_blur,(H//4,W//4),mode='bilinear',align_corners=self.align_corners)
         log_x_start_blur=F.interpolate(log_x_start_blur,(H,W),mode='bilinear',align_corners=self.align_corners)
+        log_x_start_blur = torch.log(log_x_start_blur.clamp(min=1e-30))
         log_xt = self.q_sample(log_x_start=log_x_start_blur, t=t)
         # log_xt.data.fill_(-30.0)
         # log_xt[:,150].data.fill_(0.0)
