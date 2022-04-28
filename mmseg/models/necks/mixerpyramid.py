@@ -43,10 +43,10 @@ class AdaNorm(nn.Module):
     def forward(self, x, timestep=None):
         if hasattr(self,'emb'):
             emb = self.linear(self.emb(timestep))
-            if len(emb.shape)==3:
+            if len(x.shape)==3:
                 emb=emb.unsqueeze(1)
                 scale, shift = torch.chunk(emb, 2, dim=2)
-            if len(emb.shape)==4:
+            if len(x.shape)==4:
                 emb=emb.unsqueeze(-1).unsqueeze(-1)
                 scale, shift = torch.chunk(emb, 2, dim=1)
         else:
