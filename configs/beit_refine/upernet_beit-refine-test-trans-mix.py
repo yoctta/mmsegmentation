@@ -30,7 +30,8 @@ _segencoder=dict(
     patch_size=16,
     in_channels=150,
     embed_dims=768,
-    num_layers=2
+    num_layers=4,
+    out_indices=[-1,-1,-1,-1]
 )
 _mixer=dict(
     type='MixerPyramid',
