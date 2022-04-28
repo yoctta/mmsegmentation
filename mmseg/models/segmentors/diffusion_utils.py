@@ -339,7 +339,7 @@ class DiffusionSeg(ABC):
         loss1 = kl_loss / pt 
         if self.loss_weights[1] != 0 and is_train==True:
             kl_aux = self.multinomial_kl(log_x_start[:,:-1,:], log_x0_recon[:,:-1,:])
-            kl_aux = kl_aux * (1. - mask) 
+            kl_aux = kl_aux * (1. - mask_region) 
             kl_aux = sum_except_batch(kl_aux)
             kl_aux_loss = mask * decoder_nll + (1. - mask) * kl_aux
             if self.adaptive_auxiliary_loss == True:
