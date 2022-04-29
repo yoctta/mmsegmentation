@@ -174,8 +174,7 @@ class DiffusionSeg(ABC):
         assert out.size(0) == x_t.size(0)
         assert out.size(1) == self.num_classes
         assert out.size()[2:] == x_t.size()[2:]
-        #log_pred = F.log_softmax(out.double(), dim=1).float()
-        log_pred = F.log_softmax(out, dim=1)
+        log_pred = F.log_softmax(out.double(), dim=1).float()
         batch_size = log_x_t.size()[0]
         #if self.zero_vector is None or self.zero_vector.shape[0] != batch_size:
         self.zero_vector = torch.zeros(batch_size, 1,log_pred.shape[2],log_pred.shape[3]).type_as(log_x_t)- 70
@@ -356,7 +355,7 @@ class DiffusionSeg(ABC):
         sums=(sum_except_batch((1-mask_region))+1e-8)
         vb_loss=vb_loss/sums
         acc_seg=sum_except_batch((torch.argmax(log_x0_recon,dim=1)==x_start).float())/sums
-        return log_model_prob, decoder_nll/sums, acc_seg
+        return log_model_prob, vb_loss, acc_seg
 
 
     def device(self):
