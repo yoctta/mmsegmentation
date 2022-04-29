@@ -70,15 +70,15 @@ model = dict(
     test_cfg=dict(mode='slide', crop_size=(512, 512), stride=(426, 426)),
     diffusion_cfg=dict(
         num_classes=150,
-        diffusion_step=100,
+        diffusion_step=20,
         alpha_init_type='alpha1',
-        loss_weights=[0.0,1], #loss_xt-1 ; loss_x0
+        loss_weights=[1,0.01], #loss_xt-1 ; loss_x0
         adaptive_auxiliary_loss=False,
         ignore_class=255,
         t_sampler="uniform",
         att_1=0.9,
-        att_T= 0.0000001,
-        ctt_1= 0.05,
+        att_T= 0.0000009,
+        ctt_1= 0.09,
         ctt_T= 0.999999
     )
     )
