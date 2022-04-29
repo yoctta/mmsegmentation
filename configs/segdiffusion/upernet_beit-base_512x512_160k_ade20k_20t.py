@@ -72,7 +72,7 @@ model = dict(
         num_classes=150,
         diffusion_step=20,
         alpha_init_type='alpha1',
-        loss_weights=[1,0.001], #loss_xt-1 ; loss_x0
+        loss_weights=[0,1], #loss_xt-1 ; loss_x0
         adaptive_auxiliary_loss=False,
         ignore_class=255,
         t_sampler="uniform",
@@ -83,6 +83,7 @@ model = dict(
     )
     )
 
+log_config = dict(interval=1)
 
 optimizer = dict(
     _delete_=True,
