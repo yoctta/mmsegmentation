@@ -323,6 +323,7 @@ class DiffusionSeg(ABC):
         kl = sum_except_batch(kl)
 
         decoder_nll = -log_categorical(log_x_start, log_x0_recon)
+        print("max in decoder_nll ",torch.max(decoder_nll).item())
         #print("decoder nll ",decoder_nll.mean())
         decoder_nll = sum_except_batch(decoder_nll*(1-mask_region))
 
