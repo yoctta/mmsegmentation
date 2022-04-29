@@ -56,6 +56,33 @@ class SelfAttention(BaseModule):
         self.attn_drop = nn.Dropout(attn_drop_rate)
         self.proj = nn.Linear(embed_dims, embed_dims)
         self.proj_drop = nn.Dropout(proj_drop_rate)
+        casual_mask=torch.triu(torch.ones([window_size[0]+1,window_size[1]+1]))
+        self.register_buffer("causal_mask",casual_mask)
+        coords_h = torch.arange(window_size[0])
+        coords_w = torch.arange(window_size[1])
+        # coords shape is (2, Wh, Ww)
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))
+        # coords_flatten shape is (2, Wh*Ww)
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = (
+            coords_flatten[:, :, None] - coords_flatten[:, None, :])
+        # relative_coords shape is (Wh*Ww, Wh*Ww, 2)
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        # shift to start from 0
+        relative_coords[:, :, 0] += window_size[0] - 1
+        relative_coords[:, :, 1] += window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+        relative_position_index = torch.zeros(
+            size=(window_size[0] * window_size[1] + 1, ) * 2,
+            dtype=relative_coords.dtype)
+        # relative_position_index shape is (Wh*Ww, Wh*Ww)
+        relative_position_index[1:, 1:] = relative_coords.sum(-1)
+        relative_position_index[0, 0:] = self.num_relative_distance - 3
+        relative_position_index[0:, 0] = self.num_relative_distance - 2
+        relative_position_index[0, 0] = self.num_relative_distance - 1
+
+        self.register_buffer('relative_position_index',
+                             relative_position_index)
 
     def init_weights(self):
         trunc_normal_(self.relative_position_bias_table, std=0.02)

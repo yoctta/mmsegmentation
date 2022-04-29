@@ -354,7 +354,7 @@ class DiffusionSeg(ABC):
         sums=sum_except_batch((1-mask_region))
         vb_loss=vb_loss/sums
         acc_seg=sum_except_batch((torch.argmax(log_x0_recon,dim=1)==x_start).float())/sums
-        return log_model_prob, decoder_nll, acc_seg
+        return log_model_prob, decoder_nll/sums, acc_seg
 
 
     def device(self):
