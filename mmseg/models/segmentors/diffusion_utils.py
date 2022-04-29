@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import autocast
 import einops
 from abc import ABC, abstractmethod
+autograd.set_detect_anomaly(True)
 eps = 1e-8
 
 def sum_except_batch(x, num_dims=1):
@@ -175,7 +176,6 @@ class DiffusionSeg(ABC):
         assert out.size()[2:] == x_t.size()[2:]
         #log_pred = F.log_softmax(out.double(), dim=1).float()
         log_pred = F.log_softmax(out, dim=1)
-        print(torch.min(log_pred),torch.max(log_pred))
         batch_size = log_x_t.size()[0]
         #if self.zero_vector is None or self.zero_vector.shape[0] != batch_size:
         self.zero_vector = torch.zeros(batch_size, 1,log_pred.shape[2],log_pred.shape[3]).type_as(log_x_t)- 70
