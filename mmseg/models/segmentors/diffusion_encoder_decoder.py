@@ -106,7 +106,7 @@ class DiffusionEncoderDecoder(BaseSegmentor,DiffusionSeg):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         out = self.sample(img,return_logits = True)
-        out = out['logits']
+        out = out['logits'][:,:-1]
         out = resize(
             input=out,
             size=img.shape[2:],

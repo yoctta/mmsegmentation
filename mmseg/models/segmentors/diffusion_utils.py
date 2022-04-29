@@ -338,6 +338,7 @@ class DiffusionSeg(ABC):
         # Upweigh loss term of the kl
         # vb_loss = kl_loss / pt + kl_prior
         loss1 = kl_loss / pt 
+        loss2 = 0
         if self.loss_weights[1] != 0 and is_train==True:
             kl_aux = self.multinomial_kl(log_x_start[:,:-1,:], log_x0_recon[:,:-1,:])
             kl_aux = kl_aux * (1. - mask_region) 
