@@ -77,8 +77,8 @@ model = dict(
         ignore_class=255,
         t_sampler="uniform",
         att_1=0.9,
-        att_T= 0.0000001,
-        ctt_1= 0.05,
+        att_T= 0.0000009,
+        ctt_1= 0.09,
         ctt_T= 0.999999
     )
     )
