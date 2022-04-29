@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import autocast
 import einops
 from abc import ABC, abstractmethod
-autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 eps = 1e-8
 
 def sum_except_batch(x, num_dims=1):
