@@ -323,8 +323,7 @@ class DiffusionSeg(ABC):
         kl = sum_except_batch(kl)
 
         decoder_nll = -log_categorical(log_x_start, log_x0_recon)
-        print("max in decoder_nll ",torch.max(decoder_nll).item())
-        #print("decoder nll ",decoder_nll.mean())
+        #print("decoder nll ",decoder_nll.mean().item())
         decoder_nll = sum_except_batch(decoder_nll*(1-mask_region))
 
         mask = (t == torch.zeros_like(t)).float()
@@ -354,7 +353,7 @@ class DiffusionSeg(ABC):
 
             loss2 = addition_loss_weight * kl_aux_loss / pt
         vb_loss = self.loss_weights[0]*loss1+ self.loss_weights[1]*loss2
-        sums=sum_except_batch((1-mask_region))
+        sums=(sum_except_batch((1-mask_region))+1e-8)
         vb_loss=vb_loss/sums
         acc_seg=sum_except_batch((torch.argmax(log_x0_recon,dim=1)==x_start).float())/sums
         return log_model_prob, decoder_nll/sums, acc_seg
