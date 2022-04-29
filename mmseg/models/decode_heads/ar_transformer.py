@@ -13,9 +13,10 @@ class TransDecoder(nn.Module):
     def __init__(self,channels,layers,cat_feats,) -> None:
         super().__init__()
         self.SOC=nn.Parameter(torch.zeros([1,1,self.channels]))
-        self.blocks=nn.ModuleList([TransDecoderBlock(channels) for i in ])
+        self.blocks=nn.ModuleList([TransDecoderBlock(channels,num_heads,) for i in range(layers)])
     
-    def forward(inputs)
+    def forward(inputs):
+        pass
 
 @HEADS.register_module()
 class ARTrans(BaseDecodeHead):
