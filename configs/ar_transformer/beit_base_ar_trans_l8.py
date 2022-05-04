@@ -13,7 +13,6 @@ _decode_head=dict(
     patch_size=16,
     num_classes=150,
     embed_dims=768,
-    middle_dim=32,
     num_layers=8,
     num_heads=12,
     mlp_ratio=4,
