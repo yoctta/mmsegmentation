@@ -28,7 +28,8 @@ class DiffusionEncoderDecoder(BaseSegmentor,DiffusionSeg):
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=None,
-                 diffusion_cfg=None):
+                 diffusion_cfg=None,
+                 **kwargs):
         BaseSegmentor.__init__(self,init_cfg)
         DiffusionSeg.__init__(self,**diffusion_cfg)
         self.image_backbone = builder.build_backbone(image_backbone)

@@ -144,7 +144,7 @@ class CrossAttention(BaseModule):
             self.v_bias = None
 
         self.window_size = window_size
-        self.num_relative_distance = (2* window_size[0] -1) * (2* window_size[1] - 1) + 3
+        self.num_relative_distance = (2* window_size[0] -1) * (2* window_size[1] - 1) + 1
         self.relative_position_bias_table = nn.Parameter(
             torch.zeros(self.num_relative_distance, num_heads))
         self.q_ = nn.Linear(embed_dims, embed_dims, bias=False)
@@ -167,13 +167,11 @@ class CrossAttention(BaseModule):
         relative_coords[:, :, 1] += window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * window_size[1] - 1
         relative_position_index = torch.zeros(
-            size=(window_size[0] * window_size[1] + 1, ) * 2,
+            size=(window_size[0] * window_size[1] + 1, window_size[0] * window_size[1] ),
             dtype=relative_coords.dtype)
         # relative_position_index shape is (Wh*Ww, Wh*Ww)
-        relative_position_index[1:, 1:] = relative_coords.sum(-1)
-        relative_position_index[0, 0:] = self.num_relative_distance - 3
-        relative_position_index[0:, 0] = self.num_relative_distance - 2
-        relative_position_index[0, 0] = self.num_relative_distance - 1
+        relative_position_index[1:, :] = relative_coords.sum(-1)
+        relative_position_index[0, :] = self.num_relative_distance - 1
 
         self.register_buffer('relative_position_index',
                              relative_position_index)
@@ -199,12 +197,12 @@ class CrossAttention(BaseModule):
         q = q * self.scale
         attn = (q @ k.transpose(-2, -1))
         if self.relative_position_bias_table is not None:
-            Laq,Lat=attn.shape[-2:]
+            Laq,Lat=self.relative_position_index.shape
             relative_position_bias = self.relative_position_bias_table[
-                self.relative_position_index[:Lat,:Lat].reshape(-1)].reshape(Lat,Lat, -1)
+                self.relative_position_index.reshape(-1)].reshape(Laq,Lat, -1)
             relative_position_bias = relative_position_bias.permute(
                 2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
-            if Laq==1 and ind is not None:
+            if attn.shape[-2]==1 and ind is not None:
                 relative_position_bias=relative_position_bias[:,ind:ind+1]
             attn = attn + relative_position_bias.unsqueeze(0)
         attn = attn.softmax(dim=-1)
