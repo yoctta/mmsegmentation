@@ -418,7 +418,7 @@ class ARTrans(BaseDecodeHead):
     def forward_train(self, inputs, img_metas, gt_semantic_seg, train_cfg):
         #gt_seg B,1,H,W
         inputs=self._transform_inputs(inputs)
-        gt=gt_semantic_seg.squeeze(1)
+        gt=gt_semantic_seg.squeeze(1).clamp(0,self.num_classes-1)
         gt=einops.rearrange(F.one_hot(gt,self.num_classes).to(dtype=torch.float32),"B H W C -> B C H W")
         gt=F.unfold(gt,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
         gt=self.patch_embed(einops.rearrange(gt,"B C HW -> B HW C"))
