@@ -409,7 +409,7 @@ class ARTrans(BaseDecodeHead):
             x=F.one_hot(x,self.num_classes).to(dtype=torch.float32)
             x=self.patch_embed(einops.rearrange(x,"B (H W) C -> B 1 (C H W)",H=self.patch_size,W=self.patch_size,C=self.channels))
         g=torch.stack(g,dim=1)
-        g=einops.rearrange(g,"B (H W) c h w -> B (c h w) H W",H=self.patch_shape[0],W=self.patch_shape[1])
+        g=einops.rearrange(g,"B HW c h w -> B (c h w) HW")
         g=F.fold(g,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
         g=F.relu(self.sg_bn(g))
         g=self.cls_seg(g)
@@ -421,14 +421,14 @@ class ARTrans(BaseDecodeHead):
         gt=gt_semantic_seg.squeeze(1)
         gt=einops.rearrange(F.one_hot(gt,self.num_classes).to(dtype=torch.float32),"B H W C -> B C H W")
         gt=F.unfold(gt,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
-        gt=self.patch_embed(einops.rearrange(gt,"B C H W -> B (H W) C"))
+        gt=self.patch_embed(einops.rearrange(gt,"B C HW -> B HW C"))
         kv = [l.cross_attn.extract_kv(self.flatten(i)) for i,l in zip(inputs,self.layers)]
         x=torch.cat([einops.repeat(self.cls_token,"b l c -> (r b) l c",r=gt.shape[0]),gt],dim=1)
         for i,j in zip(kv,self.layers):
             x,_,_=j(x,kv=i)
         x=x[:,:-1]
         x=self.patch_decoder(x)
-        x=einops.rearrange(x,"B (H W) C -> B C H W",H=self.patch_shape[0],W=self.patch_shape[1])
+        x=einops.rearrange(x,"B HW C -> B C HW")
         seg_logits=F.fold(x,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
         seg_logits=F.relu(self.sg_bn(seg_logits))
         seg_logits=self.cls_seg(seg_logits)
