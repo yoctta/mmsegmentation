@@ -107,7 +107,7 @@ class SelfAttention(BaseModule):
             Ww = self.window_size[1]
             Laq,Lat=attn.shape[-2:]
             relative_position_bias = self.relative_position_bias_table[
-                self.relative_position_index[:Lat,:Lat].view(-1)].view(Lat,Lat, -1)
+                self.relative_position_index[:Lat,:Lat].reshape(-1)].reshape(Lat,Lat, -1)
             relative_position_bias = relative_position_bias.permute(
                 2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
             relative_position_bias=torch.tril(relative_position_bias)[:,-Laq:]
@@ -201,7 +201,7 @@ class CrossAttention(BaseModule):
         if self.relative_position_bias_table is not None:
             Laq,Lat=attn.shape[-2:]
             relative_position_bias = self.relative_position_bias_table[
-                self.relative_position_index[:Lat,:Lat].view(-1)].view(Lat,Lat, -1)
+                self.relative_position_index[:Lat,:Lat].reshape(-1)].reshape(Lat,Lat, -1)
             relative_position_bias = relative_position_bias.permute(
                 2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
             if Laq==1 and ind is not None:
