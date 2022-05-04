@@ -408,7 +408,7 @@ class ARTrans(BaseDecodeHead):
             x=self.patch_embed(einops.rearrange(x,"B (H W) C -> B 1 (C H W)",H=self.patch_size,W=self.patch_size,C=self.channels))
         g=torch.stack(g,dim=1)
         g=einops.rearrange(g,"B HW c h w -> B (c h w) HW")
-        g=F.fold(g,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
+        g=F.fold(g,self.img_size,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
         g=F.relu(self.sg_bn(g))
         g=self.cls_seg(g)
         return g
@@ -427,7 +427,7 @@ class ARTrans(BaseDecodeHead):
         x=x[:,:-1]
         x=self.patch_decoder(x)
         x=einops.rearrange(x,"B HW C -> B C HW")
-        seg_logits=F.fold(x,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
+        seg_logits=F.fold(x,self.img_size,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
         seg_logits=F.relu(self.sg_bn(seg_logits))
         seg_logits=self.cls_seg(seg_logits)
         losses = self.losses(seg_logits, gt_semantic_seg)
