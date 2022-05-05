@@ -406,7 +406,7 @@ class ARTrans(BaseDecodeHead):
             x=einops.rearrange(x,"B C H W -> B (H W) C")
             x=torch.argmax(x,dim=-1)
             x=F.one_hot(x,self.num_classes).to(dtype=torch.float32)
-            x=self.patch_embed(einops.rearrange(x,"B (H W) C -> B 1 (C H W)",H=self.patch_size,W=self.patch_size,C=self.channels))
+            x=self.patch_embed(einops.rearrange(x,"B (H W) C -> B 1 (C H W)",H=self.patch_size,W=self.patch_size))
         g=torch.stack(g,dim=1)
         g=einops.rearrange(g,"B HW c h w -> B (c h w) HW")
         g=F.fold(g,self.img_size,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
