@@ -97,7 +97,7 @@ class SelfAttention(BaseModule):
         qkv = qkv.reshape(B, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
         q = q * self.scale
-        if context is not None:
+        if context is not None and len(context[0])>0:
             k=torch.cat([context[0],k],dim=-2)
             v=torch.cat([context[1],v],dim=-2)
             context=(k,v)
@@ -295,7 +295,7 @@ class TransDecoder(nn.Module):
     def forward(self, x,y=None,context=None,kv=None):
         ind=None
         if context is not None:
-            ind=len(context)
+            ind=len(context[0])
         if kv is None:
             kv=self.cross_attn.extract_kv(y)
         x0,context=self.self_attn(self.norm1(x),context)
@@ -392,7 +392,7 @@ class ARTrans(BaseDecodeHead):
     def forward(self, inputs):
         inputs = self._transform_inputs(inputs)
         kv = [l.cross_attn.extract_kv(self.flatten(i)) for i,l in zip(inputs,self.layers)]
-        contexts=[None]*len(self.layers)
+        contexts=[[[],[]]]*len(self.layers)
         x=self.cls_token
         g=[]
         for j in range(self.patch_shape[0]*self.patch_shape[1]):
