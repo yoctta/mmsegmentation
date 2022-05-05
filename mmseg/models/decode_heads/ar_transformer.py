@@ -204,6 +204,7 @@ class CrossAttention(BaseModule):
                 2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
             if attn.shape[-2]==1 and ind is not None:
                 relative_position_bias=relative_position_bias[:,ind:ind+1]
+            print(attn.shape,relative_position_bias.shape)
             attn = attn + relative_position_bias.unsqueeze(0)
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
