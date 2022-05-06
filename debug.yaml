@@ -1,0 +1,70 @@
+description: Distributed Pytorch train
+
+target:
+  service: amlk8s
+  name: itplabrr1cl1
+  vc: resrchvc
+  # service: aml
+  # subscription_id: 98c1805a-6004-4afd-97f3-ae044be4f3eb
+  # resource_group: face-aml-a
+  # workspace_name: face-aml-a
+  # cluster: V100
+
+environment:
+  image: yoctta/py3x:latest
+  #setup:
+  # The data will be downloaded to /tmp/ ONLY once per node.
+  #- pip install -r docker-requirement.txt
+
+storage:
+  # storage account and container where the ImageNet tar balls are contained
+  data:
+    storage_account_name: facevcstandard
+    container_name: v-hanzhao-data
+    mount_dir: /mnt/data
+  my_storage:
+    storage_account_name: facevcstandard
+    container_name: v-hanzhao
+    mount_dir: /mnt/home
+
+#code:
+  #local_dir: $CONFIG_DIR
+
+jobs:
+# by default, enables mpi and returns N processes per node where N is number of gpus
+- name: train
+  sku: 1x G8
+  command:
+  - env
+  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/beit_refine/ 8
+  #- python train.py --name ade20k_train --config_file configs/ADE20K.yaml
+  #- python /app/utils/hold.py hold_all
+  #- sleep 14d 
+  submit_args:
+    container_args:
+      shm_size: 512g
+    env:      
+      MKL_THREADING_LAYER: GNU
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_TIMEOUT: 22
+  aml_mpirun:
+    process_count_per_node: 0
+    communicator: "OpenMpi"
+
+- name: place_holder
+  sku: 1x G8
+  command:
+  - env
+  - python /app/utils/letmeknow.py --event start --email zhq2015@mail.ustc.edu.cn
+  - python /app/utils/hold.py hold_all
+  - sleep 14d
+  submit_args:
+    container_args:
+      shm_size: 512g
+    env:      
+      MKL_THREADING_LAYER: GNU
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_TIMEOUT: 22
+  aml_mpirun:
+    process_count_per_node: 8
+    communicator: "OpenMpi"
