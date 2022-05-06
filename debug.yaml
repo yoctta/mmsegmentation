@@ -36,10 +36,8 @@ jobs:
   sku: 1x G8
   command:
   - env
-  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/beit_refine/ 8
-  #- python train.py --name ade20k_train --config_file configs/ADE20K.yaml
-  #- python /app/utils/hold.py hold_all
-  #- sleep 14d 
+  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/segdiffusion/diffusion_upernet_beit-base_512x512_160k_ade20k_100t_kl_loss_att_0.8.py 8
+
   submit_args:
     container_args:
       shm_size: 512g
