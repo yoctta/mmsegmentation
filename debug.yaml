@@ -1,14 +1,14 @@
 description: Distributed Pytorch train
 
 target:
-  service: amlk8s
-  name: itplabrr1cl1
-  vc: resrchvc
-  # service: aml
-  # subscription_id: 98c1805a-6004-4afd-97f3-ae044be4f3eb
-  # resource_group: face-aml-a
-  # workspace_name: face-aml-a
-  # cluster: V100
+  # service: amlk8s
+  # name: itplabrr1cl1
+  # vc: resrchvc
+  service: aml
+  subscription_id: 98c1805a-6004-4afd-97f3-ae044be4f3eb
+  resource_group: face-aml-a
+  workspace_name: face-aml-a
+  cluster: V100
 
 environment:
   image: yoctta/py3x:latest

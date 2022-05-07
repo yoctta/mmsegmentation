@@ -327,15 +327,6 @@ class DiffusionSeg(ABC):
 
         mask = (t == torch.zeros_like(t)).float()
         kl_loss = mask * decoder_nll + (1. - mask) * kl
-        
-
-        #Lt2 = decoder_nll.pow(2)
-        Lt2 = kl_loss.pow(2)
-        Lt2_prev = self.Lt_history.gather(dim=0, index=t)
-        new_Lt_history = (0.1 * Lt2 + 0.9 * Lt2_prev).detach()
-        self.Lt_history.scatter_(dim=0, index=t, src=new_Lt_history)
-        self.Lt_count.scatter_add_(dim=0, index=t, src=torch.ones_like(Lt2))
-
         # Upweigh loss term of the kl
         # vb_loss = kl_loss / pt + kl_prior
         loss1 = kl_loss / pt 
@@ -354,6 +345,11 @@ class DiffusionSeg(ABC):
         vb_loss = self.loss_weights[0]*loss1+ self.loss_weights[1]*loss2
         sums=(sum_except_batch((1-mask_region))+1e-8)
         vb_loss=vb_loss/sums
+        Lt2 = vb_loss.pow(2)
+        Lt2_prev = self.Lt_history.gather(dim=0, index=t)
+        new_Lt_history = (0.1 * Lt2 + 0.9 * Lt2_prev).detach()
+        self.Lt_history.scatter_(dim=0, index=t, src=new_Lt_history)
+        self.Lt_count.scatter_add_(dim=0, index=t, src=torch.ones_like(Lt2))
         acc_seg=sum_except_batch((torch.argmax(log_x0_recon,dim=1)==x_start).float())/sums
         return log_model_prob, vb_loss, acc_seg
 
