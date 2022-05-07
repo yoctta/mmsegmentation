@@ -131,7 +131,7 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
         prog_bar = mmcv.ProgressBar(len(dataset)//world_size)
     loader_indices = data_loader.batch_sampler
     counter=0
-    os.makedirs("work_dirs/seg_diff/visualize/",exist_ok=True)
+    os.makedirs(out_dir,exist_ok=True)
     for batch_indices, data in zip(loader_indices, data_loader):
         if counter%world_size==rank:
             with torch.no_grad():
