@@ -82,6 +82,8 @@ class SelfAttention(BaseModule):
 
         self.register_buffer('relative_position_index',
                              relative_position_index)
+        causal_mask=torch.triu(-float("inf")*torch.ones(relative_position_index.shape),1).unsqueeze(0)
+        self.register_buffer("causal_mask",causal_mask)
 
     def init_weights(self):
         trunc_normal_(self.relative_position_bias_table, std=0.02)
@@ -110,7 +112,7 @@ class SelfAttention(BaseModule):
                 self.relative_position_index[:Lat,:Lat].reshape(-1)].reshape(Lat,Lat, -1)
             relative_position_bias = relative_position_bias.permute(
                 2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
-            relative_position_bias=torch.tril(relative_position_bias)[:,-Laq:]
+            relative_position_bias=(self.causal_mask[:,:Lat,:Lat]+relative_position_bias)[:,-Laq:]
             attn = attn + relative_position_bias.unsqueeze(0)
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
