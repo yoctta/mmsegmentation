@@ -435,6 +435,7 @@ class ARTrans(BaseDecodeHead):
         B=x.shape[0]
         x=einops.rearrange(x,"B HW (c h w) -> (B HW) c h w",h=self.patch_size,w=self.patch_size)
         x=resize(x,(self.patch_size,self.patch_size))
+        print(x.shape)
         x=F.relu(self.sg_bn(x))
         x=self.cls_seg(x)
         x=einops.rearrange(x,"(B HW) c h w -> B (c h w) HW",B=B)
