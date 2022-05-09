@@ -4,7 +4,6 @@ import einops
 import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule
-
 from mmseg.ops import resize
 from ..builder import HEADS
 from .decode_head import BaseDecodeHead
@@ -24,6 +23,8 @@ from mmcv.runner import BaseModule, ModuleList, _load_checkpoint
 from torch.nn.modules.batchnorm import _BatchNorm
 from torch.nn.modules.utils import _pair as to_2tuple
 
+def reduce_dict(ld):
+    return {name:sum([i[name] for i in ld])/len(ld) for name in ld[0]}
 
 
 class SelfAttention(BaseModule):
@@ -223,7 +224,10 @@ class TransDecoder(nn.Module):
                  num_heads,
                  feedforward_channels,
                  attn_drop_rate=0.,
+                 cross_attn_drop_rate=0.,
                  drop_path_rate=0.,
+                 proj_drop_rate=0.,
+                 cross_proj_drop_rate=0.,
                  num_fcs=2,
                  qv_bias=True,
                  act_cfg=dict(type='GELU'),
@@ -241,7 +245,7 @@ class TransDecoder(nn.Module):
             qv_bias=qv_bias,
             qk_scale=None,
             attn_drop_rate=attn_drop_rate,
-            proj_drop_rate=0.,
+            proj_drop_rate=proj_drop_rate,
             init_cfg=None)
         self.cross_attn=CrossAttention(
             embed_dims=embed_dims,
@@ -250,8 +254,8 @@ class TransDecoder(nn.Module):
             window_size=window_size,
             qv_bias=qv_bias,
             qk_scale=None,
-            attn_drop_rate=attn_drop_rate,
-            proj_drop_rate=0.,
+            attn_drop_rate=cross_attn_drop_rate,
+            proj_drop_rate=cross_proj_drop_rate,
             init_cfg=None
         )
         self.ffn = FFN(
@@ -315,6 +319,7 @@ class ARTrans(BaseDecodeHead):
                  dropout_ratio=0.1,
                  img_size=512,
                  patch_size=16,
+                 decode_patch_size=4,
                  num_classes=150,
                  embed_dims=768,
                  num_layers=8,
@@ -322,7 +327,10 @@ class ARTrans(BaseDecodeHead):
                  mlp_ratio=4,
                  qv_bias=True,
                  attn_drop_rate=0.,
+                 cross_attn_drop_rate=0.,
                  drop_path_rate=0.,
+                 proj_drop_rate=0.,
+                 cross_proj_drop_rate=0.,
                  norm_cfg=dict(type='LN'),
                  act_cfg=dict(type='GELU'),
                  final_norm=False,
@@ -338,8 +346,9 @@ class ARTrans(BaseDecodeHead):
 
         self.img_size = img_size
         self.patch_size = patch_size
-        self.patch_embed = nn.Linear(num_classes*patch_size*patch_size,embed_dims)
-        self.patch_decoder=nn.Linear(embed_dims,channels*patch_size*patch_size)
+        self.decode_patch_size=decode_patch_size
+        self.patch_embed = nn.Linear((num_classes+1)*patch_size*patch_size,embed_dims)
+        self.patch_decoder=nn.Linear(embed_dims,channels*decode_patch_size*decode_patch_size)
         self.sg_bn=nn.BatchNorm2d(channels)
         window_size = (img_size[0] // patch_size, img_size[1] // patch_size)
         self.patch_shape = window_size
@@ -353,7 +362,10 @@ class ARTrans(BaseDecodeHead):
                     num_heads=num_heads,
                     feedforward_channels=mlp_ratio * embed_dims,
                     attn_drop_rate=attn_drop_rate,
+                    cross_attn_drop_rate=cross_attn_drop_rate,
                     drop_path_rate=dpr[i],
+                    proj_drop_rate=proj_drop_rate,
+                    cross_proj_drop_rate=cross_proj_drop_rate,
                     num_fcs=num_fcs,
                     qv_bias=qv_bias,
                     act_cfg=act_cfg,
@@ -400,37 +412,47 @@ class ARTrans(BaseDecodeHead):
             for i in range(len(self.layers)):
                 x,context,_=self.layers[i](x,context=contexts[i],kv=kv[i])
                 contexts[i]=context
-            x=einops.rearrange(self.patch_decoder(x),"B 1 (C H W) -> B C H W",H=self.patch_size,W=self.patch_size,C=self.channels)
-            g.append(x)
+            x=einops.rearrange(self.patch_decoder(x),"B 1 (C H W) -> B C H W",H=self.decode_patch_size,W=self.decode_patch_size,C=self.channels)
+            x=resize(x,(self.patch_size,self.patch_size))
             x=F.relu(self.sg_bn(x))
             x=self.cls_seg(x)
+            g.append(x)
             x=einops.rearrange(x,"B C H W -> B (H W) C")
             x=torch.argmax(x,dim=-1)
-            x=F.one_hot(x,self.num_classes).to(dtype=torch.float32)
+            x=F.one_hot(x,self.num_classes+1).to(dtype=torch.float32)
             x=self.patch_embed(einops.rearrange(x,"B (H W) C -> B 1 (C H W)",H=self.patch_size,W=self.patch_size))
         g=torch.stack(g,dim=1)
         g=einops.rearrange(g,"B HW c h w -> B (c h w) HW")
         g=F.fold(g,self.img_size,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
-        g=F.relu(self.sg_bn(g))
-        g=self.cls_seg(g)
         return g
 
-    def forward_train(self, inputs, img_metas, gt_semantic_seg, train_cfg):
-        #gt_seg B,1,H,W
-        inputs=self._transform_inputs(inputs)
-        gt=gt_semantic_seg.squeeze(1).clamp(0,self.num_classes-1)
-        gt=einops.rearrange(F.one_hot(gt,self.num_classes).to(dtype=torch.float32),"B H W C -> B C H W")
-        gt=F.unfold(gt,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
-        gt=self.patch_embed(einops.rearrange(gt,"B C HW -> B HW C"))
-        kv = [l.cross_attn.extract_kv(self.flatten(i)) for i,l in zip(inputs,self.layers)]
+    def forward_train_core(self,gt,kv):
         x=torch.cat([einops.repeat(self.cls_token,"b l c -> (r b) l c",r=gt.shape[0]),gt],dim=1)
         for i,j in zip(kv,self.layers):
             x,_,_=j(x,kv=i)
         x=x[:,:-1]
         x=self.patch_decoder(x)
-        x=einops.rearrange(x,"B HW C -> B C HW")
+        B=x.shape[0]
+        x=einops.rearrange(x,"B HW (c h w) -> (B HW) c h w",h=self.patch_size,w=self.patch_size)
+        x=resize(x,(self.patch_size,self.patch_size))
+        x=F.relu(self.sg_bn(x))
+        x=self.cls_seg(x)
+        x=einops.rearrange(x,"(B HW) c h w -> B (c h w) HW",B=B)
         seg_logits=F.fold(x,self.img_size,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
-        seg_logits=F.relu(self.sg_bn(seg_logits))
-        seg_logits=self.cls_seg(seg_logits)
-        losses = self.losses(seg_logits, gt_semantic_seg)
-        return losses
+        return seg_logits
+
+    def forward_train(self, inputs, img_metas, gt_semantic_seg, train_cfg=dict(num_iters=1)):
+        #gt_seg B,1,H,W
+        total_loss=[]
+        inputs=self._transform_inputs(inputs)
+        kv = [l.cross_attn.extract_kv(self.flatten(i)) for i,l in zip(inputs,self.layers)]
+        gt=gt_semantic_seg.squeeze(1).clamp(0,self.num_classes)
+        for i in range(train_cfg['num_iters']):
+            gt=einops.rearrange(F.one_hot(gt,self.num_classes+1).to(dtype=torch.float32),"B H W C -> B C H W")
+            gt=F.unfold(gt,(self.patch_size,self.patch_size),stride=(self.patch_size,self.patch_size))
+            gt=self.patch_embed(einops.rearrange(gt,"B C HW -> B HW C"))
+            seg_logits=self.forward_train_core(gt,kv)
+            gt=torch.argmax(seg_logits.detach(),dim=1)
+            losses = self.losses(seg_logits, gt_semantic_seg)
+            total_loss.append(losses)
+        return reduce_dict(total_loss)

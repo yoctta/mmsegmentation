@@ -17,7 +17,8 @@ _decode_head=dict(
     num_heads=12,
     mlp_ratio=4,
     qv_bias=True,
-    attn_drop_rate=0.,
+    attn_drop_rate=0.2,
+    cross_attn_drop_rate=0.0,
     drop_path_rate=0.,
     norm_cfg=dict(type='LN'),
     act_cfg=dict(type='GELU'),
@@ -60,7 +61,7 @@ model = dict(
         loss_decode=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.4)),
     # model training and testing settings
-    train_cfg=dict(),
+    train_cfg=dict(num_iters=2),
     test_cfg=dict(mode='slide', crop_size=(512, 512), stride=(426, 426)))
 
 optimizer = dict(
