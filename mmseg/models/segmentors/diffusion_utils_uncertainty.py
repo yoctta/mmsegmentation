@@ -53,7 +53,6 @@ def alpha_schedule(time_step, N=100, att_1 = 0.9, att_T = 0.000001, ctt_1 = 0.00
     btt = (1-att-ctt)/N
     return at, bt, ct, att, btt, ctt
 
-
 class DiffusionSeg(ABC):
     def __init__(
         self,
@@ -83,8 +82,6 @@ class DiffusionSeg(ABC):
 
         if alpha_init_type == "alpha1":
             at, bt, ct, att, btt, ctt = alpha_schedule(self.num_timesteps,self.num_classes, att_1,att_T,ctt_1,ctt_T)
-        if alpha_init_type == "linear_snr":
-            pass
         else:
             print("alpha_init_type is Wrong !! ")
 
