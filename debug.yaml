@@ -1,14 +1,14 @@
 description: Distributed Pytorch train
 
 target:
-  service: amlk8s
-  name: itplabrr1cl1
-  vc: resrchvc
-  # service: aml
-  # subscription_id: 98c1805a-6004-4afd-97f3-ae044be4f3eb
-  # resource_group: face-aml-a
-  # workspace_name: face-aml-a
-  # cluster: V100
+  # service: amlk8s
+  # name: itplabrr1cl1
+  # vc: resrchvc
+  service: aml
+  subscription_id: 98c1805a-6004-4afd-97f3-ae044be4f3eb
+  resource_group: face-aml-a
+  workspace_name: face-aml-a
+  cluster: V100
 
 environment:
   image: yoctta/py3x:latest
@@ -32,11 +32,11 @@ storage:
 
 jobs:
 # by default, enables mpi and returns N processes per node where N is number of gpus
-- name: train1
+- name: train_diffusion1
   sku: 1x G8
   command:
   - env
-  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/segdiffusion/upernet_beit-base_512x512_160k_ade20k_20t_importance.py 8
+  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/segdiffusion/diffusion2_20t_kl_loss.py 8
 
   submit_args:
     container_args:
@@ -49,12 +49,11 @@ jobs:
     process_count_per_node: 0
     communicator: "OpenMpi"
 
-- name: train2
+- name: show_diffusion
   sku: 1x G8
   command:
   - env
-  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/segdiffusion/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss_importance.py 8
-
+  - cd /mnt/home/mmsegmentation/; python show_diffusion.py
   submit_args:
     container_args:
       shm_size: 512g
@@ -67,37 +66,21 @@ jobs:
     communicator: "OpenMpi"
 
 
-- name: train3
-  sku: 1x G8
-  command:
-  - env
-  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/segdiffusion/upernet_beit-base_512x512_480k_ade20k_20t_kl_loss.py 8
 
-  submit_args:
-    container_args:
-      shm_size: 512g
-    env:      
-      MKL_THREADING_LAYER: GNU
-      NCCL_IB_DISABLE: 0
-      NCCL_IB_TIMEOUT: 22
-  aml_mpirun:
-    process_count_per_node: 0
-    communicator: "OpenMpi"
-
-- name: place_holder
-  sku: 1x G8
-  command:
-  - env
-  - python /app/utils/letmeknow.py --event start --email zhq2015@mail.ustc.edu.cn
-  - python /app/utils/hold.py hold_all
-  - sleep 14d
-  submit_args:
-    container_args:
-      shm_size: 512g
-    env:      
-      MKL_THREADING_LAYER: GNU
-      NCCL_IB_DISABLE: 0
-      NCCL_IB_TIMEOUT: 22
-  aml_mpirun:
-    process_count_per_node: 8
-    communicator: "OpenMpi"
+# - name: place_holder
+#   sku: 1x G8
+#   command:
+#   - env
+#   - python /app/utils/letmeknow.py --event start --email zhq2015@mail.ustc.edu.cn
+#   - python /app/utils/hold.py hold_all
+#   - sleep 14d
+#   submit_args:
+#     container_args:
+#       shm_size: 512g
+#     env:      
+#       MKL_THREADING_LAYER: GNU
+#       NCCL_IB_DISABLE: 0
+#       NCCL_IB_TIMEOUT: 22
+#   aml_mpirun:
+#     process_count_per_node: 8
+#     communicator: "OpenMpi"

@@ -1,4 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from cv2 import UMAT_MAGIC_MASK
+import einops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -37,7 +39,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
         self._init_feature_mixer(mixer,diffusion_cfg)
         self._init_decode_head(decode_head)
         self._init_auxiliary_head(auxiliary_head)
-
+        self.uc_bn=nn.BatchNorm2d(1)
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
         self.use_cache=False
@@ -71,7 +73,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
                 self.auxiliary_head = builder.build_head(auxiliary_head)
 
 
-    def _model(self, im ,x_t, t):
+    def _model(self, im ,x_t, t, uc_map):
         if self.use_cache:
             if self.cache is not None:
                image_features=self.cache
@@ -81,7 +83,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
         else:
             image_features=self.image_backbone(im)
         mask_features=self.mask_backbone(x_t,t)
-        mixed_features=self.feature_mixer(image_features,mask_features,t)
+        mixed_features=self.feature_mixer(image_features,mask_features,t, uc_map)
         output=self.decode_head(mixed_features)
         output = resize(
             input=output,
@@ -101,12 +103,24 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
             x = self.neck(x)
         return x
 
-    
+    def extract_uc(self,logits_aux):
+        logits_aux=torch.softmax(logits_aux.detach(),dim=1)
+        x=einops.repeat(-torch.log(logits_aux),"B C H W -> B C 9 H W")
+        B,C,_,H,W=x.shape
+        logits_aux=F.pad(logits_aux,(1,1,1,1),"reflect")
+        logits_aux=F.unfold(logits_aux,3,stride=1)
+        logits_aux=einops.rearrange(logits_aux,"B (c t1 t2) (H W) -> B c (t1 t2) H W",t1=3,t2=3,H=H,W=W)
+        uc_map=torch.einsum("abcde,abcde->ade",x,logits_aux)/9
+        return torch.sigmoid(self.uc_bn(uc_map.unsqueeze(1)))
 
     def encode_decode(self, img, img_metas):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
-        out = self.sample(img,return_logits = True)
+        image_features=self.image_backbone(img)
+        self.cache=image_features
+        logits_aux = self.auxiliary_head.forward(image_features)
+        uc_map=self.extract_uc(logits_aux)
+        out = self.sample(img,return_logits = True, uc_map=uc_map)
         out = out['logits'][:,:-1]
         out = resize(
             input=out,
@@ -136,18 +150,11 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
         """Run forward function and calculate loss for auxiliary head in
         training."""
         losses = dict()
-        if isinstance(self.auxiliary_head, nn.ModuleList):
-            for idx, aux_head in enumerate(self.auxiliary_head):
-                loss_aux = aux_head.forward_train(x, img_metas,
-                                                  gt_semantic_seg,
-                                                  self.train_cfg)
-                losses.update(add_prefix(loss_aux, f'aux_{idx}'))
-        else:
-            loss_aux = self.auxiliary_head.forward_train(
-                x, img_metas, gt_semantic_seg, self.train_cfg)
-            losses.update(add_prefix(loss_aux, 'aux'))
+        loss_aux, logits_aux = self.auxiliary_head.forward_train(
+            x, img_metas, gt_semantic_seg, self.train_cfg)
+        losses.update(add_prefix(loss_aux, 'aux'))
 
-        return losses
+        return losses, logits_aux
 
 
     def forward_train(self, img, img_metas, gt_semantic_seg):
@@ -171,12 +178,10 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
         losses = dict()
         image_features=self.image_backbone(img)
         self.cache=image_features
-        if self.with_auxiliary_head:
-            loss_aux, uncertainty = self._auxiliary_head_forward_train(self.cache, img_metas, gt_semantic_seg)
-            losses.update(loss_aux)
-            self.cache_uc=uncertainty
-        
-        loss_decode = self.train_loss(batch=dict(image=img,seg=gt_semantic_seg.squeeze(1),uncertainty=uncertainty),return_loss=True)
+        loss_aux, logits_aux = self._auxiliary_head_forward_train(self.cache, img_metas, gt_semantic_seg)
+        losses.update(loss_aux)
+        uc_map=self.extract_uc(logits_aux)
+        loss_decode = self.train_loss(batch=dict(image=img,seg=gt_semantic_seg.squeeze(1)),return_loss=True,uc_map=uc_map)
         losses.update(loss_decode)
         self.del_cache()
         return losses

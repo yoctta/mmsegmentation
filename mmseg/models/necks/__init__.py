@@ -5,7 +5,7 @@ from .ic_neck import ICNeck
 from .jpu import JPU
 from .mla_neck import MLANeck
 from .multilevel_neck import MultiLevelNeck
-from .mixerpyramid import MixerPyramid, MixerPyramid2
+from .mixerpyramid import MixerPyramid, MixerPyramid2 ,MixerPyramidUC
 __all__ = [
-    'FPN', 'MultiLevelNeck', 'MLANeck', 'ICNeck', 'JPU', 'Feature2Pyramid', 'MixerPyramid', 'MixerPyramid2'
+    'FPN', 'MultiLevelNeck', 'MLANeck', 'ICNeck', 'JPU', 'Feature2Pyramid', 'MixerPyramid', 'MixerPyramid2' ,'MixerPyramidUC'
 ]

@@ -108,3 +108,36 @@ class MixerPyramid2(nn.Module):
         for i in range(len(image_features)):
             outputs.append(self.img_mask_convs[i](torch.cat([image_features[i],mask_features[i]],dim=1)))
         return tuple(outputs)
+
+
+class MixerPyramidUC(nn.Module):
+    """Feature2Pyramid.
+
+    A neck structure connect ViT backbone and decoder_heads.
+
+    Args:
+        embed_dims (int): Embedding dimension.
+        rescales (list[float]): Different sampling multiples were
+            used to obtain pyramid features. Default: [4, 2, 1, 0.5].
+        norm_cfg (dict): Config dict for normalization layer.
+            Default: dict(type='SyncBN', requires_grad=True).
+    """
+
+    def __init__(self,
+                 image_feature_dim,
+                 mask_feature_dim,
+                 embed_dim,
+                 diffusion_step=0,
+                 rescales=[4, 2, 1, 0.5]):
+        super().__init__()
+        self.featurepyramid=Feature2Pyramid(embed_dim,rescales)
+        self.image_convs=nn.ModuleList([nn.Conv2d(image_feature_dim,embed_dim,3,padding=1) for i in range(4)])
+        self.mask_convs=nn.ModuleList([nn.Conv2d(mask_feature_dim,embed_dim,3,padding=1) for i in range(4)])
+        self.image_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
+        self.mask_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
+
+    def forward(self, image_features, mask_features, t=None, uc_map=None):
+        outputs = []
+        for i in range(len(image_features)):
+            outputs.append(self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+(1-uc_map)*self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t))
+        return tuple(self.featurepyramid(outputs))

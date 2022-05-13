@@ -20,9 +20,32 @@ import torch.nn.functional as F
 import cv2
 import numpy as np
 from torch import multiprocessing as mp
+import einops
 config="configs/segdiffusion/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss.py"
-checkpoint="pretrain/seg_diff_20t_160k.pth"
-out_dir="work_dirs/seg_diff/visualize"
+checkpoint="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/160000.pth"
+out_dir="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/visualize_data"
+inference_with_uc=True
+
+def mod_log_z_by_uc(log_z,uc,t):
+    rate=1.0/20.0/19.0*t
+    gate=torch.quantile(uc, 1-rate)
+    to_mask=uc>gate
+    mask=torch.zeros_like(log_z)
+    mask[:,-1]=1
+    mask = torch.log(mask.clamp(min=1e-30))
+    p=to_mask*mask+(~to_mask)*log_z
+    log_z.data.copy_(p)
+
+def extract_uc(logits_aux):
+    #print(logits_aux.sum(dim=1))
+    x=einops.repeat(-torch.log(logits_aux),"B C H W -> B C 9 H W")
+    B,C,_,H,W=x.shape
+    logits_aux=F.pad(logits_aux,(1,1,1,1),"reflect")
+    logits_aux=F.unfold(logits_aux,3,stride=1)
+    logits_aux=einops.rearrange(logits_aux,"B (c t1 t2) (H W) -> B c (t1 t2) H W",t1=3,t2=3,H=H,W=W)
+    uc_map=torch.einsum("abcde,abcde->ade",x,logits_aux)/9
+    return uc_map.unsqueeze(1)
+
 def worker(rank,config,checkpoint,out_dir,world_size):
     torch.cuda.set_device(rank)
     cfg = mmcv.Config.fromfile(config)
@@ -78,8 +101,11 @@ def make_grid(imgs,rows=0,margin=5):
         pad[rs*(H+margin):rs*(H+margin)+H,ls*(W+margin):ls*(W+margin)+W]=imgs[i]
     return pad
 
-
-
+def vis_uc(x,color):
+    color=np.array(color).reshape(1,1,3)
+    x=x/np.max(x)
+    return np.expand_dims(x,-1)*color
+    
 
 def slide_inference(model, img):
     h_stride, w_stride = model.test_cfg.stride
@@ -100,8 +126,8 @@ def slide_inference(model, img):
             crop_img = img[:, :, y1:y2, x1:x2]
             crop_images.append(crop_img)
     def merge_fn(patches):
-        preds = torch.zeros((batch_size, num_classes, h_img, w_img),device="cpu")
-        count_mat = torch.zeros((batch_size, 1, h_img, w_img),device="cpu")
+        preds = torch.zeros((batch_size, num_classes+1, h_img, w_img),device=patches[0].device)
+        count_mat = torch.zeros((batch_size, 1, h_img, w_img),device=patches[0].device)
         i=0
         for h_idx in range(h_grids):
             for w_idx in range(w_grids):
@@ -111,11 +137,13 @@ def slide_inference(model, img):
                 x2 = min(x1 + w_crop, w_img)
                 y1 = max(y2 - h_crop, 0)
                 x1 = max(x2 - w_crop, 0)
-                crop_seg_logit = patches[i].cpu()
+                crop_seg_logit = patches[i]
+                B,C,H,W=crop_seg_logit.shape
                 i+=1
-                preds += F.pad(crop_seg_logit,
-                                (int(x1), int(preds.shape[3] - x2), int(y1),
-                                int(preds.shape[2] - y2)))
+                preds[:,:C,y1:y2, x1:x2]+=crop_seg_logit
+                # preds += F.pad(crop_seg_logit,
+                #                 (int(x1), int(preds.shape[3] - x2), int(y1),
+                #                 int(preds.shape[2] - y2)))
                 count_mat[:, :, y1:y2, x1:x2] += 1
         assert (count_mat == 0).sum() == 0
         preds = preds / count_mat
@@ -134,23 +162,33 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
     os.makedirs(out_dir,exist_ok=True)
     for batch_indices, data in zip(loader_indices, data_loader):
         if counter%world_size==rank:
+            to_save=dict()
             with torch.no_grad():
                 img_tensor = data['img'][0]
                 img_metas = data['img_metas'][0].data[0]
                 imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
+                gt=dataset.get_gt_seg_map_by_idx(counter)
+                gt=torch.from_numpy(gt).unsqueeze(0).to(dtype=torch.uint8)-1
                 assert len(imgs) == len(img_metas)
                 crop_images, merge_fn = slide_inference(model, img_tensor.cuda())
                 ts=[[] for i in range(len(crop_images))]
                 zs=[[] for i in range(len(crop_images))]
                 xs=[[] for i in range(len(crop_images))]
                 outs=[]
+                temp_uc=[0]
                 for i in range(len(crop_images)):
                     def call_back(log_z,log_x_recon,t,**args):
                         ts[i].append(t[0].item())
-                        zs[i].append(resize(input=torch.exp(log_z[:,:-1]),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners).cpu())
-                        xs[i].append(resize(input=torch.exp(log_x_recon[:,:-1]),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners).cpu())
+                        xs[i].append(resize(input=torch.exp(log_x_recon),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
+                        if inference_with_uc:
+                            if ts[i][-1]==19:
+                                temp_uc_=extract_uc(xs[i][-1])
+                                temp_uc[0]=temp_uc_/temp_uc_.max()
+                            mod_log_z_by_uc(log_z,temp_uc[0],ts[i][-1])
+                        zs[i].append(resize(input=torch.exp(log_z),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
+                        
                     out = model.sample(crop_images[i],return_logits = True,call_back=call_back)
-                    out = out['logits'][:,:-1]
+                    out = out['logits']
                     out = resize(input=out,size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners)
                     outs.append(out)
                 out=merge_fn(outs)
@@ -162,17 +200,34 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 h, w, _ = img_meta['img_shape']
                 img_show = img[:h, :w, :]
                 ori_h, ori_w = img_meta['ori_shape'][:-1]
+                uc_map=[resize(extract_uc(i), (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners) for i in xs]
                 img_show = mmcv.imresize(img_show, (ori_w, ori_h))
-                out=torch.argmax(resize(out, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1)
-                zs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1) for i in zs]
-                xs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1) for i in xs]
-                torch.save(dict(out=out,zs=zs,ts=ts,xs=xs),"%s/%s_data.pkl"%(out_dir,counter))
-                showed_img_out=model.show_result(img_show,out,opacity=opacity)
-                showed_zt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in zs])
-                showed_xt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in xs])
+                showed_gt=model.show_result(img_show,gt,opacity=opacity)
+                xs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in xs]
+                zs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in zs]
+                errs=[(i!=gt) & (gt !=255) for i in xs]
+                uc_map=[(vis_uc(i.squeeze().cpu().numpy(),[255,255,255])).astype("uint8") for i in uc_map]
+                uc_map=make_grid(uc_map)
+                cv2.imwrite("%s/%s_uncertainty.png"%(out_dir,counter),uc_map)
+                err_map=[(vis_uc(i.squeeze().cpu().numpy(),[255,255,255])).astype("uint8") for i in errs]
+                err_map=make_grid(err_map)
+                cv2.imwrite("%s/%s_err.png"%(out_dir,counter),err_map)
+                ### seg
+                showed_img_out=model.show_result(img_show,torch.argmax(resize(out, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu(),opacity=opacity)
                 cv2.imwrite("%s/%s_seg.png"%(out_dir,counter),showed_img_out)
+                to_save['seg']=showed_img_out
+                ### gt
+                cv2.imwrite("%s/%s_seg_gt.png"%(out_dir,counter),showed_gt)
+                ### zt
+                showed_zt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in zs])
                 cv2.imwrite("%s/%s_zt.png"%(out_dir,counter),showed_zt_out)
+                to_save['zt']=showed_zt_out
+                ### xt
+                showed_xt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in xs])
                 cv2.imwrite("%s/%s_xt.png"%(out_dir,counter),showed_xt_out)
+                to_save['xt']=showed_xt_out
+                torch.cuda.empty_cache() 
+                torch.save(to_save,"%s/%s_data.pkl"%(out_dir,counter))
                 if rank==0:
                     prog_bar.update()
         counter+=1
@@ -185,7 +240,7 @@ def eval(config,out_dir):
     import json
     files=glob.glob("%s/*_data.pkl"%out_dir)
     files=sorted(files,key=lambda x:int(x.split('/')[-1][:-9]))
-    xts=[torch.load(i)['xs'] for i in files]
+    xts=[torch.load(i)['xt'] for i in files]
     res=[]
     for T in range(len(xts[0])):
         g=[i[T].cpu().numpy().squeeze() for i in xts]

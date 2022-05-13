@@ -83,7 +83,7 @@ class DiffusionSeg(ABC):
 
         if alpha_init_type == "alpha1":
             at, bt, ct, att, btt, ctt = alpha_schedule(self.num_timesteps,self.num_classes, att_1,att_T,ctt_1,ctt_T)
-        if alpha_init_type == "linear_snr":
+        elif alpha_init_type == "alpha2":
             pass
         else:
             print("alpha_init_type is Wrong !! ")
@@ -167,7 +167,7 @@ class DiffusionSeg(ABC):
         return log_probs
 
     def predict_start(self, log_x_t, im, t):          # p(x0|xt)
-        x_t = torch.exp(log_x_t)
+        x_t = torch.exp(log_x_t[:,:-1])  #edit 
         if self.amp == True:
             with autocast():
                 out = self._model(im ,x_t, t)

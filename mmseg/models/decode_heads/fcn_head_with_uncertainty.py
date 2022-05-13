@@ -83,14 +83,9 @@ class FCNHeadUC(BaseDecodeHead):
         """Forward function."""
         logits = self._forward_feature(inputs)
         logits = self.cls_seg(logits)
-        uncertainty_map=self.get_uncertainty(inputs,logits)
-        uncertainty_map=torch.sigmoid(uncertainty_map)
-        return logits, uncertainty_map
+        return logits
 
     def forward_train(self, inputs, img_metas, gt_semantic_seg, train_cfg=None):
-        logits=self._forward_feature(inputs)
-        logits = self.cls_seg(logits)
-        uncertainty_map=self.get_uncertainty(inputs,logits)
-        uncertainty_map=torch.sigmoid(uncertainty_map)
-        loss=SoftLabelCEloss(logits,uncertainty_map,gt_semantic_seg)
-        return loss, uncertainty_map
+        logits = self.forward(inputs)
+        losses = self.losses(logits, gt_semantic_seg)
+        return losses, logits
