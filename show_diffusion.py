@@ -214,7 +214,8 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 err_map=make_grid(err_map)
                 cv2.imwrite("%s/%s_err.png"%(out_dir,counter),err_map)
                 ### seg
-                showed_img_out=model.show_result(img_show,torch.argmax(resize(out, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu(),opacity=opacity)
+                seg=torch.argmax(resize(out, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu()
+                showed_img_out=model.show_result(img_show,seg,opacity=opacity)
                 cv2.imwrite("%s/%s_seg.png"%(out_dir,counter),showed_img_out)
                 to_save['seg']=showed_img_out
                 ### gt
@@ -226,7 +227,7 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 ### xt
                 showed_xt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in xs])
                 cv2.imwrite("%s/%s_xt.png"%(out_dir,counter),showed_xt_out)
-                to_save['xt']=showed_xt_out
+                to_save['xt']=xs
                 torch.cuda.empty_cache() 
                 torch.save(to_save,"%s/%s_data.pkl"%(out_dir,counter))
                 if rank==0:

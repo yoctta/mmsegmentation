@@ -90,12 +90,7 @@ class DiffusionSegUC(ABC):
             att = np.concatenate((att[1:], [1]))
             ctt = np.concatenate((ctt[1:], [0]))
             btt = (1-att-ctt)/N
-
-
-    @abstractmethod
-    def _model(im ,x_t, t, uc_map):
-        pass
-
+            
     def extract(self, t, x_shape,uc_map):
         device=uc_map.device
         scheduler_args=dict()
@@ -106,18 +101,25 @@ class DiffusionSegUC(ABC):
             one_minus_ct = (1-ctt_next) / (1-ctt)
             ct = 1-one_minus_ct
             bt = (1-at-ct)/self.num_classes
-            att = np.concatenate((att[1:], [1]))
-            ctt = np.concatenate((ctt[1:], [0]))
-            btt = (1-att-ctt)/self.num_classes
-            scheduler_args['log_cumprod_at']=torch.log(att)
-            scheduler_args['log_cumprod_bt']=torch.log(btt)
-            scheduler_args['log_cumprod_ct']=torch.log(ctt)
+            log_ctt=_extract(self.log_cumprod_ct,t,x_shape)*(1-r*uc_map)
+            log_ct=_extract(self.log_ct,t,x_shape)*(1-r*uc_map)
+            log_1_min_cumprod_ct=log_1_min_a(log_ctt)
+            log_1_min_ct=log_1_min_a(log_ct)
+            log_att=log_1_min_cumprod_ct+torch.log(snr)
+            log_btt=log_att+torch.log((1-snr)/N/snr)
+            scheduler_args['log_cumprod_at']=log_att
+            scheduler_args['log_cumprod_bt']=log_btt
+            scheduler_args['log_cumprod_ct']=log_ctt
             scheduler_args['log_at']=torch.log(at)
             scheduler_args['log_bt']=torch.log(bt)
-            scheduler_args['log_ct']=torch.log(ct)
-            scheduler_args['log_1_min_ct'] = log_1_min_a(scheduler_args['log_ct'])
-            scheduler_args['log_1_min_cumprod_ct'] = log_1_min_a(scheduler_args['log_cumprod_ct'])
+            scheduler_args['log_ct']=log_ct
+            scheduler_args['log_1_min_ct'] = log_1_min_ct
+            scheduler_args['log_1_min_cumprod_ct'] = log_1_min_cumprod_ct
         return scheduler_args
+
+    @abstractmethod
+    def _model(im ,x_t, t, uc_map):
+        pass
 
     def multinomial_kl(self, log_prob1, log_prob2):   # compute KL loss on log_prob
         kl = (log_prob1.exp() * (log_prob1 - log_prob2)).sum(dim=1)
