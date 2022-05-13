@@ -1,4 +1,5 @@
 from sched import scheduler
+from time import time
 import torch
 import numpy as np
 import torch.nn as nn
@@ -61,13 +62,35 @@ class DiffusionSegUC(ABC):
         self.ignore_class=ignore_class
         self.t_sampler=t_sampler
         self.alpha_init_type=alpha_init_type
-        if self.alpha_init_type=="alpha1":
-            self.schedule_params=alpha_schedule(schedule_params)
+        self.alpha_schedule(alpha_init_type,schedule_params)
         self.diffusion_acc_list = [0] * self.num_timesteps
         self.diffusion_keep_list = [0] * self.num_timesteps
         self.register_buffer('Lt_history', torch.zeros(self.num_timesteps))
         self.register_buffer('Lt_count', torch.zeros(self.num_timesteps))
         self.zero_vector = None
+
+    def alpha_schedule(self,alpha_init_type,schedule_params):
+        assert alpha_init_type in ["alpha1"]
+        if alpha_init_type=="alpha1":
+            ctt_1=schedule_params['ctt_1']
+            ctt_T=schedule_params['ctt_T']
+            att_1=schedule_params['att_1']
+            att_T=schedule_params['att_T']
+            time_step=self.num_timesteps
+            N=self.num_classes
+            att = np.arange(0, time_step)/(time_step-1)*(att_T - att_1) + att_1
+            att = np.concatenate(([1], att))
+            at = att[1:]/att[:-1]
+            ctt = np.arange(0, time_step)/(time_step-1)*(ctt_T - ctt_1) + ctt_1
+            ctt = np.concatenate(([0], ctt))
+            one_minus_ctt = 1 - ctt
+            one_minus_ct = one_minus_ctt[1:] / one_minus_ctt[:-1]
+            ct = 1-one_minus_ct
+            bt = (1-at-ct)/N
+            att = np.concatenate((att[1:], [1]))
+            ctt = np.concatenate((ctt[1:], [0]))
+            btt = (1-att-ctt)/N
+
 
     @abstractmethod
     def _model(im ,x_t, t, uc_map):

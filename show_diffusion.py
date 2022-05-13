@@ -262,9 +262,9 @@ def eval(config,out_dir):
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
-    parser.add_argument("--config")
-    parser.add_argument("--checkpoint")
-    parser.add_argument("--out_dir")
+    parser.add_argument("--config",default=config)
+    parser.add_argument("--checkpoint",default=checkpoint)
+    parser.add_argument("--out_dir",default=out_dir)
     args=parser.parse_args()
     mp.set_start_method('spawn',force=True)
     world_size=torch.cuda.device_count()
