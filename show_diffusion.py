@@ -22,8 +22,9 @@ import numpy as np
 from torch import multiprocessing as mp
 import einops
 config="configs/segdiffusion/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss.py"
-checkpoint="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/160000.pth"
+checkpoint="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/iter_160000.pth"
 out_dir="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/visualize_data"
+base="base_512x512_160k_ade20k_20t_kl_loss"
 inference_with_uc=True
 
 def mod_log_z_by_uc(log_z,uc,t):
@@ -265,6 +266,7 @@ if __name__=="__main__":
     parser.add_argument("--config",default=config)
     parser.add_argument("--checkpoint",default=checkpoint)
     parser.add_argument("--out_dir",default=out_dir)
+    # parser.add_argument("--base",default=base)
     args=parser.parse_args()
     mp.set_start_method('spawn',force=True)
     world_size=torch.cuda.device_count()
