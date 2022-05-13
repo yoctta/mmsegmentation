@@ -186,14 +186,14 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                                 temp_uc_=extract_uc(xs[i][-1])
                                 temp_uc[0]=temp_uc_/temp_uc_.max()
                             mod_log_z_by_uc(log_z,temp_uc[0],ts[i][-1])
-                        zs[i].append(resize(input=torch.exp(log_z),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
+                        # zs[i].append(resize(input=torch.exp(log_z),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
                         
                     out = model.sample(crop_images[i],return_logits = True,call_back=call_back)
                     out = out['logits']
                     out = resize(input=out,size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners)
                     outs.append(out)
                 out=merge_fn(outs)
-                zs=[merge_fn(i) for i in  zip(*zs)]
+                # zs=[merge_fn(i) for i in  zip(*zs)]
                 xs=[merge_fn(i) for i in  zip(*xs)]
                 ts=ts[0]
                 img=imgs[0]
@@ -205,7 +205,7 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 img_show = mmcv.imresize(img_show, (ori_w, ori_h))
                 showed_gt=model.show_result(img_show,gt,opacity=opacity)
                 xs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in xs]
-                zs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in zs]
+                # zs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in zs]
                 errs=[(i!=gt) & (gt !=255) for i in xs]
                 uc_map=[(vis_uc(i.squeeze().cpu().numpy(),[255,255,255])).astype("uint8") for i in uc_map]
                 uc_map=make_grid(uc_map)
@@ -220,9 +220,9 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 ### gt
                 cv2.imwrite("%s/%s_seg_gt.png"%(out_dir,counter),showed_gt)
                 ### zt
-                showed_zt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in zs])
-                cv2.imwrite("%s/%s_zt.png"%(out_dir,counter),showed_zt_out)
-                to_save['zt']=showed_zt_out
+                # showed_zt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in zs])
+                # cv2.imwrite("%s/%s_zt.png"%(out_dir,counter),showed_zt_out)
+                # to_save['zt']=showed_zt_out
                 ### xt
                 showed_xt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in xs])
                 cv2.imwrite("%s/%s_xt.png"%(out_dir,counter),showed_xt_out)
