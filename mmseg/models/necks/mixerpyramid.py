@@ -34,6 +34,9 @@ class AdaNorm(nn.Module):
             else:
                 self.emb = nn.Embedding(diffusion_step, n_embd)
             self.linear = nn.Linear(n_embd, n_embd*2)
+            with torch.no_grad():
+                self.linear.bias.fill_(0)
+                self.linear.weight.fill_(0.1)
         if 'layernorm' in self.emb_type:
             self.norm = nn.LayerNorm(n_embd, elementwise_affine=affine)
         if 'batchnorm' in self.emb_type:
@@ -128,16 +131,18 @@ class MixerPyramidUC(nn.Module):
                  mask_feature_dim,
                  embed_dim,
                  diffusion_step=0,
-                 rescales=[4, 2, 1, 0.5]):
+                 rescales=[4, 2, 1, 0.5],
+                 uc_map_weight=0.1):
         super().__init__()
         self.featurepyramid=Feature2Pyramid(embed_dim,rescales)
         self.image_convs=nn.ModuleList([nn.Conv2d(image_feature_dim,embed_dim,3,padding=1) for i in range(4)])
         self.mask_convs=nn.ModuleList([nn.Conv2d(mask_feature_dim,embed_dim,3,padding=1) for i in range(4)])
         self.image_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
         self.mask_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
+        self.uc_map_weight=uc_map_weight
 
     def forward(self, image_features, mask_features, t=None, uc_map=None):
         outputs = []
         for i in range(len(image_features)):
-            outputs.append(self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+(1-uc_map)*self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t))
+            outputs.append(0.5*self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+0.5*(1-uc_map*self.uc_map_weight)*self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t))
         return tuple(self.featurepyramid(outputs))

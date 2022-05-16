@@ -92,6 +92,7 @@ class DiffusionSegUC(ABC):
             btt = (1-att-ctt)/N
             
     def extract(self, t, x_shape,uc_map):
+        #### modify current noise scheduler by uncertainty.
         device=uc_map.device
         scheduler_args=dict()
         with torch.no_grad():
@@ -103,6 +104,7 @@ class DiffusionSegUC(ABC):
             bt = (1-at-ct)/self.num_classes
             log_ctt=_extract(self.log_cumprod_ct,t,x_shape)*(1-r*uc_map)
             log_ct=_extract(self.log_ct,t,x_shape)*(1-r*uc_map)
+            snr=_extract(self.snr,t,x_shape)
             log_1_min_cumprod_ct=log_1_min_a(log_ctt)
             log_1_min_ct=log_1_min_a(log_ct)
             log_att=log_1_min_cumprod_ct+torch.log(snr)

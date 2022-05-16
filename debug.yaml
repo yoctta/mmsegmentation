@@ -36,7 +36,7 @@ jobs:
   sku: 1x G8
   command:
   - env
-  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/segdiffusion/diffusion2_20t_kl_loss.py 8
+  - cd /mnt/home/mmsegmentation/; tools/dist_train.sh configs/segdiffusion/diffusion2_20t_kl_loss_replace_all.py 8
 
   submit_args:
     container_args:

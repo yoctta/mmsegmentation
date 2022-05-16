@@ -253,7 +253,7 @@ def eval(config,out_dir):
     targets=['mIoU','aAcc','mAcc']
     r2=[]
     for i in range(len(res)):
-        g={j:res[-i][j] for j in targets}
+        g={j:res[-1-i][j] for j in targets}
         g["t"]=i
         r2.append(g)
     print(r2)

@@ -52,8 +52,8 @@ class LayerDecayOptimizerConstructor(DefaultOptimizerConstructor):
         for name, param in module.named_parameters():
             if not param.requires_grad:
                 continue  # frozen weights
-            if len(param.shape) == 1 or name.endswith('.bias') or name in (
-                    'pos_embed', 'cls_token'):
+            # if len(param.shape) == 1 or name.endswith('.bias') or name in ('pos_embed', 'cls_token'): ##change for norm and rpe
+            if len(param.shape) == 1 or 'bias' in name or "norm" in name or name.split('.')[-1] in ('pos_embed', 'cls_token'):
                 group_name = 'no_decay'
                 this_weight_decay = 0.
             else:

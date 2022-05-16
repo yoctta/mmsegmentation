@@ -22,7 +22,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
     """
 
     def __init__(self,
-                 image_backbone,
+                 backbone,
                  mask_backbone,
                  decode_head,
                  mixer,
@@ -34,7 +34,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
                  **kwargs):
         BaseSegmentor.__init__(self,init_cfg)
         DiffusionSegUC.__init__(self,**diffusion_cfg)
-        self.image_backbone = builder.build_backbone(image_backbone)
+        self.backbone = builder.build_backbone(backbone)
         self._init_mask_backbone(mask_backbone,diffusion_cfg)
         self._init_feature_mixer(mixer,diffusion_cfg)
         self._init_decode_head(decode_head)
@@ -78,10 +78,10 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
             if self.cache is not None:
                image_features=self.cache
             else:
-                image_features=self.image_backbone(im)
+                image_features=self.backbone(im)
                 self.cache=image_features
         else:
-            image_features=self.image_backbone(im)
+            image_features=self.backbone(im)
         mask_features=self.mask_backbone(x_t,t)
         mixed_features=self.feature_mixer(image_features,mask_features,t, uc_map)
         output=self.decode_head(mixed_features)
@@ -98,7 +98,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
 
     def extract_feat(self, img):
         """Extract features from images."""
-        x = self.image_backbone(img)
+        x = self.backbone(img)
         if self.with_neck:
             x = self.neck(x)
         return x
@@ -116,7 +116,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
     def encode_decode(self, img, img_metas):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
-        image_features=self.image_backbone(img)
+        image_features=self.backbone(img)
         self.cache=image_features
         logits_aux = self.auxiliary_head.forward(image_features)
         uc_map=self.extract_uc(logits_aux)
@@ -176,7 +176,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
 
         self.use_cache=True
         losses = dict()
-        image_features=self.image_backbone(img)
+        image_features=self.backbone(img)
         self.cache=image_features
         loss_aux, logits_aux = self._auxiliary_head_forward_train(self.cache, img_metas, gt_semantic_seg)
         losses.update(loss_aux)
