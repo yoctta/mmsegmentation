@@ -44,7 +44,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
         self.test_cfg = test_cfg
         self.use_cache=False
         self.cache=None
-        self.img_size=backbone['image_size']
+        self.img_size=backbone['img_size']
         assert self.with_decode_head
 
     def _init_mask_backbone(self,mask_backbone,diffusion_cfg):

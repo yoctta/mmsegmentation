@@ -67,7 +67,7 @@ def mod_log_z_by_uc(log_z,uc,t,log_cumprod_ct,x_recon):
 #     return uc_map.unsqueeze(1)
 
 def extract_uc(logits_aux):
-    uc_map=1-torch.max(logits_aux,dim=1)
+    uc_map=1-torch.max(logits_aux,dim=1)[0]
     return uc_map.unsqueeze(1)
 
 def worker(rank,config,checkpoint,out_dir,world_size):
