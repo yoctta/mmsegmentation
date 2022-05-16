@@ -317,6 +317,8 @@ class DiffusionSegUC(ABC):
         Lt2 = vb_loss.pow(2)
         Lt2_prev = self.Lt_history.gather(dim=0, index=t)
         new_Lt_history = (0.1 * Lt2 + 0.9 * Lt2_prev).detach()
+        print(self.Lt_history.dtype)
+        print(Lt2.dtype)
         self.Lt_history.scatter_(dim=0, index=t, src=new_Lt_history)
         self.Lt_count.scatter_add_(dim=0, index=t, src=torch.ones_like(Lt2))
         acc_seg=sum_except_batch((torch.argmax(log_x0_recon,dim=1)==x_start).float())/sums
