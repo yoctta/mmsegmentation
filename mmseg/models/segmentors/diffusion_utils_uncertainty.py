@@ -177,8 +177,8 @@ class DiffusionSegUC(ABC):
         batch_size = log_x_start.size()[0]
         onehot_x_t = log_onehot_to_index(log_x_t)
         mask = (onehot_x_t == self.num_classes).unsqueeze(1) 
-        log_one_vector = torch.zeros(batch_size,1,1,1).type_as(log_x_t)
-        log_zero_vector = torch.log(log_one_vector+1.0e-30).expand(-1, -1, log_x_start.shape[2],log_x_start.shape[3])
+        log_one_vector = torch.zeros(batch_size,1,log_x_start.shape[2],log_x_start.shape[3]).type_as(log_x_t)
+        log_zero_vector = torch.log(log_one_vector+1.0e-30)
 
         log_qt = self.q_pred(log_x_t, scheduler_args)                                  # q(xt|x0)
         # log_qt = torch.cat((log_qt[:,:-1,:], log_zero_vector), dim=1)
