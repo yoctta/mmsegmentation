@@ -188,7 +188,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
         loss_aux, logits_aux = self._auxiliary_head_forward_train(self.cache, img_metas, gt_semantic_seg,drop_mask)
         losses.update(loss_aux)
         uc_map=self.extract_uc(logits_aux)
-        drop_mask=einops.repeat(drop_mask.float(),"B -> B 1 1 1")
+        drop_mask=einops.repeat(torch.from_numpy(drop_mask).to(device=uc_map.device,dtype=torch.float32),"B -> B 1 1 1")
         uc_map=torch.zeros_like(uc_map)*drop_mask+uc_map*(1-drop_mask)
         loss_decode = self.train_loss(batch=dict(image=img,seg=gt_semantic_seg.squeeze(1)),return_loss=True,uc_map=uc_map)
         losses.update(loss_decode)
