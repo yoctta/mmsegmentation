@@ -78,8 +78,8 @@ model = dict(
         t_sampler="uniform",
         att_1=0.9,
         att_T= 0.0000001,
-        ctt_1= 0,
-        ctt_T= 0
+        ctt_1= 0.000001,
+        ctt_T= 0.0000001
     )
     )
 

@@ -63,8 +63,6 @@ class DiffusionSegUC(ABC):
         self.t_sampler=t_sampler
         self.alpha_init_type=alpha_init_type
         self.alpha_schedule(alpha_init_type,schedule_params)
-        self.diffusion_acc_list = [0] * self.num_timesteps
-        self.diffusion_keep_list = [0] * self.num_timesteps
         self.register_buffer('Lt_history', torch.zeros(self.num_timesteps))
         self.register_buffer('Lt_count', torch.zeros(self.num_timesteps))
         self.zero_vector = None
@@ -90,6 +88,28 @@ class DiffusionSegUC(ABC):
             att = np.concatenate((att[1:], [1]))
             ctt = np.concatenate((ctt[1:], [0]))
             btt = (1-att-ctt)/N
+            at = torch.tensor(at.astype('float64'))
+            bt = torch.tensor(bt.astype('float64'))
+            ct = torch.tensor(ct.astype('float64'))
+            log_at = torch.log(at)
+            log_bt = torch.log(bt)
+            log_ct = torch.log(ct)
+            att = torch.tensor(att.astype('float64'))
+            btt = torch.tensor(btt.astype('float64'))
+            ctt = torch.tensor(ctt.astype('float64'))
+            log_cumprod_at = torch.log(att)
+            log_cumprod_bt = torch.log(btt)
+            log_cumprod_ct = torch.log(ctt)
+            log_1_min_ct = log_1_min_a(log_ct)
+            log_1_min_cumprod_ct = log_1_min_a(log_cumprod_ct)
+            self.register_buffer('log_at', log_at.float())
+            self.register_buffer('log_bt', log_bt.float())
+            self.register_buffer('log_ct', log_ct.float())
+            self.register_buffer('log_cumprod_at', log_cumprod_at.float())
+            self.register_buffer('log_cumprod_bt', log_cumprod_bt.float())
+            self.register_buffer('log_cumprod_ct', log_cumprod_ct.float())
+            self.register_buffer('log_1_min_ct', log_1_min_ct.float())
+            self.register_buffer('log_1_min_cumprod_ct', log_1_min_cumprod_ct.float())
             
     def extract(self, t, x_shape,uc_map):
         #### modify current noise scheduler by uncertainty.
@@ -97,6 +117,7 @@ class DiffusionSegUC(ABC):
         scheduler_args=dict()
         with torch.no_grad():
             T=einops.repeat(t,"B -> B 1 H W",H=x_shape[-2],W=x_shape[-1])
+
             ctt = ((T+1)*ctt_T/self.num_timesteps)**(1-r*uc_map)
             ctt_next=((T+2)*ctt_T/self.num_timesteps)**(1-r*uc_map)
             one_minus_ct = (1-ctt_next) / (1-ctt)
@@ -278,13 +299,6 @@ class DiffusionSegUC(ABC):
         x0_real = x_start
         xt_1_recon = log_onehot_to_index(log_model_prob)
         xt_recon = log_onehot_to_index(log_xt)
-        for index in range(t.size()[0]):
-            this_t = t[index].item()
-            same_rate = (x0_recon[index] == x0_real[index]).sum().cpu()/x0_real.nelement()
-            self.diffusion_acc_list[this_t] = same_rate.item()*0.1 + self.diffusion_acc_list[this_t]*0.9
-            same_rate = (xt_1_recon[index] == xt_recon[index]).sum().cpu()/xt_recon.nelement()
-            self.diffusion_keep_list[this_t] = same_rate.item()*0.1 + self.diffusion_keep_list[this_t]*0.9
-
         # compute log_true_prob now 
         log_true_prob = self.q_posterior(log_x_start=log_x_start, log_x_t=log_xt,scheduler_args=scheduler_args, scheduler_args_1=scheduler_args_1)
         kl = self.multinomial_kl(log_true_prob, log_model_prob)  ## kl (B,H,W)
