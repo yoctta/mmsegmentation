@@ -1,5 +1,6 @@
 from sched import scheduler
 from time import time
+from cv2 import resize
 import torch
 import numpy as np
 import torch.nn as nn
@@ -99,7 +100,7 @@ class DiffusionSegUC(ABC):
 
     def extract(self, t, x_shape,uc_map):
         #### modify current noise scheduler by uncertainty.
-        device=uc_map.device
+        uc_map=resize(uc_map,x_shape[-2:])
         scheduler_args=dict()
         with torch.no_grad():
             log_ctt=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t,x_shape,self.num_timesteps))
