@@ -36,7 +36,10 @@ def index_to_log_onehot(x, num_classes):
 def log_onehot_to_index(log_x):
     return log_x.argmax(1)
 
-
+def _extract(x,t,x_shape):
+    b, *_ = t.shape
+    out = x.gather(-1, t)
+    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
 class DiffusionSegUC(ABC):
     def __init__(
@@ -49,7 +52,7 @@ class DiffusionSegUC(ABC):
         adaptive_auxiliary_loss=False,
         ignore_class=255,
         t_sampler="importance",
-        schedule_params=dict(ctt_1=0.05, ctt_T=0.99999, snr_1=0.9, snr_T=0.05)
+        schedule_params=dict(ctt_1=0.05, ctt_T=0.99999, snr_1=0.9, snr_T=0.05,cttr=0.5)
     ):
         super().__init__()
 
@@ -72,72 +75,52 @@ class DiffusionSegUC(ABC):
         if alpha_init_type=="alpha1":
             ctt_1=schedule_params['ctt_1']
             ctt_T=schedule_params['ctt_T']
-            att_1=schedule_params['att_1']
-            att_T=schedule_params['att_T']
+            snr_1=schedule_params['snr_1']
+            snr_T=schedule_params['snr_T']
+            self.cttr=schedule_params['cttr']
+            N=self.num_timesteps
             time_step=self.num_timesteps
-            N=self.num_classes
-            att = np.arange(0, time_step)/(time_step-1)*(att_T - att_1) + att_1
-            att = np.concatenate(([1], att))
-            at = att[1:]/att[:-1]
             ctt = np.arange(0, time_step)/(time_step-1)*(ctt_T - ctt_1) + ctt_1
             ctt = np.concatenate(([0], ctt))
-            one_minus_ctt = 1 - ctt
-            one_minus_ct = one_minus_ctt[1:] / one_minus_ctt[:-1]
-            ct = 1-one_minus_ct
-            bt = (1-at-ct)/N
-            att = np.concatenate((att[1:], [1]))
-            ctt = np.concatenate((ctt[1:], [0]))
-            btt = (1-att-ctt)/N
-            at = torch.tensor(at.astype('float64'))
-            bt = torch.tensor(bt.astype('float64'))
-            ct = torch.tensor(ct.astype('float64'))
-            log_at = torch.log(at)
-            log_bt = torch.log(bt)
-            log_ct = torch.log(ct)
-            att = torch.tensor(att.astype('float64'))
-            btt = torch.tensor(btt.astype('float64'))
             ctt = torch.tensor(ctt.astype('float64'))
-            log_cumprod_at = torch.log(att)
-            log_cumprod_bt = torch.log(btt)
             log_cumprod_ct = torch.log(ctt)
-            log_1_min_ct = log_1_min_a(log_ct)
-            log_1_min_cumprod_ct = log_1_min_a(log_cumprod_ct)
-            self.register_buffer('log_at', log_at.float())
-            self.register_buffer('log_bt', log_bt.float())
-            self.register_buffer('log_ct', log_ct.float())
-            self.register_buffer('log_cumprod_at', log_cumprod_at.float())
-            self.register_buffer('log_cumprod_bt', log_cumprod_bt.float())
             self.register_buffer('log_cumprod_ct', log_cumprod_ct.float())
-            self.register_buffer('log_1_min_ct', log_1_min_ct.float())
-            self.register_buffer('log_1_min_cumprod_ct', log_1_min_cumprod_ct.float())
+            snr = np.arange(0, time_step)/(time_step-1)*(snr_T - snr_1) + snr_1
+            snr = np.concatenate(([1], snr))
+            snr = torch.tensor(snr)
+            self.register_buffer('snr', snr)
             
+    def modify_ctt_by_uc(self,uc,log_ctt):
+        return log_ctt*(1-self.cttr*uc)
+
+    def modify_snr_by_uc(self,uc,snr):
+        pass
+
     def extract(self, t, x_shape,uc_map):
         #### modify current noise scheduler by uncertainty.
         device=uc_map.device
         scheduler_args=dict()
         with torch.no_grad():
-            T=einops.repeat(t,"B -> B 1 H W",H=x_shape[-2],W=x_shape[-1])
-
-            ctt = ((T+1)*ctt_T/self.num_timesteps)**(1-r*uc_map)
-            ctt_next=((T+2)*ctt_T/self.num_timesteps)**(1-r*uc_map)
-            one_minus_ct = (1-ctt_next) / (1-ctt)
-            ct = 1-one_minus_ct
-            bt = (1-at-ct)/self.num_classes
-            log_ctt=_extract(self.log_cumprod_ct,t,x_shape)*(1-r*uc_map)
-            log_ct=_extract(self.log_ct,t,x_shape)*(1-r*uc_map)
+            log_ctt=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t,x_shape))
+            log_ctt_next=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t+1,x_shape))
+            log_ct=torch.log(1-(1-torch.exp(log_ctt_next))/(1-torch.exp(log_ctt)))
             snr=_extract(self.snr,t,x_shape)
+            snr_next=_extract(self.snr,t+1,x_shape)
             log_1_min_cumprod_ct=log_1_min_a(log_ctt)
             log_1_min_ct=log_1_min_a(log_ct)
             log_att=log_1_min_cumprod_ct+torch.log(snr)
-            log_btt=log_att+torch.log((1-snr)/N/snr)
-            scheduler_args['log_cumprod_at']=log_att
-            scheduler_args['log_cumprod_bt']=log_btt
-            scheduler_args['log_cumprod_ct']=log_ctt
-            scheduler_args['log_at']=torch.log(at)
-            scheduler_args['log_bt']=torch.log(bt)
+            log_1_min_cumprod_ct_next= log_1_min_a(log_ctt_next)
+            log_att_next= log_1_min_cumprod_ct_next+torch.log(snr_next)
+            log_btt_next=log_att_next+torch.log((1-snr_next)/self.num_classes/snr_next)
+            log_at=log_att_next-log_att
+            scheduler_args['log_cumprod_at']=log_att_next
+            scheduler_args['log_cumprod_bt']=log_btt_next
+            scheduler_args['log_cumprod_ct']=log_ctt_next
+            scheduler_args['log_at']=log_at
+            scheduler_args['log_bt']=torch.log((1-torch.exp(log_at)-torch.exp(log_ct))/self.num_classes)
             scheduler_args['log_ct']=log_ct
             scheduler_args['log_1_min_ct'] = log_1_min_ct
-            scheduler_args['log_1_min_cumprod_ct'] = log_1_min_cumprod_ct
+            scheduler_args['log_1_min_cumprod_ct'] = log_1_min_cumprod_ct_next
         return scheduler_args
 
     @abstractmethod

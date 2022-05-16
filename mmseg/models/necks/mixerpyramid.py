@@ -132,7 +132,7 @@ class MixerPyramidUC(nn.Module):
                  embed_dim,
                  diffusion_step=0,
                  rescales=[4, 2, 1, 0.5],
-                 uc_map_weight=0.1):
+                 uc_map_weight=1):
         super().__init__()
         self.featurepyramid=Feature2Pyramid(embed_dim,rescales)
         self.image_convs=nn.ModuleList([nn.Conv2d(image_feature_dim,embed_dim,3,padding=1) for i in range(4)])
