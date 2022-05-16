@@ -27,24 +27,47 @@ out_dir="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/visualize_d
 base="base_512x512_160k_ade20k_20t_kl_loss"
 inference_with_uc=True
 
-def mod_log_z_by_uc(log_z,uc,t):
-    rate=1.0/20.0/19.0*t
-    gate=torch.quantile(uc, 1-rate)
+def index_to_log_onehot(x, num_classes):
+    assert x.max().item() < num_classes, \
+        f'Error: {x.max().item()} >= {num_classes}'
+    x_onehot = F.one_hot(x, num_classes)
+    permute_order = (0, -1) + tuple(range(1, len(x.size())))
+    x_onehot = x_onehot.permute(permute_order)
+    log_x = torch.log(x_onehot.float().clamp(min=1e-30))
+    return log_x
+
+# def mod_log_z_by_uc(log_z,uc,t):
+#     rate=1.0/20.0/19.0*t
+#     gate=torch.quantile(uc, 1-rate)
+#     to_mask=uc>gate
+#     mask=torch.zeros_like(log_z)
+#     mask[:,-1]=1
+#     mask = torch.log(mask.clamp(min=1e-30))
+#     p=to_mask*mask+(~to_mask)*log_z
+#     log_z.data.copy_(p)
+
+def mod_log_z_by_uc(log_z,uc,t,log_cumprod_ct,x_recon):
+    ctt=torch.exp(log_cumprod_ct[t-1]).item()
+    gate=torch.quantile(uc, ctt)
     to_mask=uc>gate
     mask=torch.zeros_like(log_z)
     mask[:,-1]=1
     mask = torch.log(mask.clamp(min=1e-30))
-    p=to_mask*mask+(~to_mask)*log_z
+    p=to_mask*mask+(~to_mask)*index_to_log_onehot(x_recon,log_z.shape[1])
     log_z.data.copy_(p)
 
+# def extract_uc(logits_aux):
+#     #print(logits_aux.sum(dim=1))
+#     x=einops.repeat(-torch.log(logits_aux),"B C H W -> B C 9 H W")
+#     B,C,_,H,W=x.shape
+#     logits_aux=F.pad(logits_aux,(1,1,1,1),"reflect")
+#     logits_aux=F.unfold(logits_aux,3,stride=1)
+#     logits_aux=einops.rearrange(logits_aux,"B (c t1 t2) (H W) -> B c (t1 t2) H W",t1=3,t2=3,H=H,W=W)
+#     uc_map=torch.einsum("abcde,abcde->ade",x,logits_aux)/9
+#     return uc_map.unsqueeze(1)
+
 def extract_uc(logits_aux):
-    #print(logits_aux.sum(dim=1))
-    x=einops.repeat(-torch.log(logits_aux),"B C H W -> B C 9 H W")
-    B,C,_,H,W=x.shape
-    logits_aux=F.pad(logits_aux,(1,1,1,1),"reflect")
-    logits_aux=F.unfold(logits_aux,3,stride=1)
-    logits_aux=einops.rearrange(logits_aux,"B (c t1 t2) (H W) -> B c (t1 t2) H W",t1=3,t2=3,H=H,W=W)
-    uc_map=torch.einsum("abcde,abcde->ade",x,logits_aux)/9
+    uc_map=1-torch.argmax(logits_aux,dim=1)
     return uc_map.unsqueeze(1)
 
 def worker(rank,config,checkpoint,out_dir,world_size):
@@ -178,14 +201,14 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 outs=[]
                 temp_uc=[0]
                 for i in range(len(crop_images)):
-                    def call_back(log_z,log_x_recon,t,**args):
+                    def call_back(log_z,log_x_recon,t,x_recon,**args):
                         ts[i].append(t[0].item())
                         xs[i].append(resize(input=torch.exp(log_x_recon),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
                         if inference_with_uc:
                             if ts[i][-1]==19:
                                 temp_uc_=extract_uc(xs[i][-1])
                                 temp_uc[0]=temp_uc_/temp_uc_.max()
-                            mod_log_z_by_uc(log_z,temp_uc[0],ts[i][-1])
+                            mod_log_z_by_uc(log_z,temp_uc[0],ts[i][-1],model.log_cumprod_ct,x_recon)
                         # zs[i].append(resize(input=torch.exp(log_z),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
                         
                     out = model.sample(crop_images[i],return_logits = True,call_back=call_back)
