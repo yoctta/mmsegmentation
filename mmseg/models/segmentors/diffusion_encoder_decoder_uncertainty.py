@@ -4,7 +4,7 @@ import einops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 from mmseg.core import add_prefix
 from mmseg.ops import resize
 from .. import builder
@@ -44,6 +44,7 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
         self.test_cfg = test_cfg
         self.use_cache=False
         self.cache=None
+        self.img_size=backbone['image_size']
         assert self.with_decode_head
 
     def _init_mask_backbone(self,mask_backbone,diffusion_cfg):
@@ -146,14 +147,15 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
     #     seg_logits = self.decode_head.forward_test(x, img_metas, self.test_cfg)
     #     return seg_logits
 
-    def _auxiliary_head_forward_train(self, x, img_metas, gt_semantic_seg):
+    def _auxiliary_head_forward_train(self, x, img_metas, gt_semantic_seg,drop_mask):
         """Run forward function and calculate loss for auxiliary head in
         training."""
         losses = dict()
+        
+        gt_semantic_seg[drop_mask]=torch.zeros_like(gt_semantic_seg[0])+self.ignore_class
         loss_aux, logits_aux = self.auxiliary_head.forward_train(
             x, img_metas, gt_semantic_seg, self.train_cfg)
         losses.update(add_prefix(loss_aux, 'aux'))
-
         return losses, logits_aux
 
 
@@ -176,11 +178,17 @@ class DiffusionEncoderDecoderUC(BaseSegmentor,DiffusionSegUC):
 
         self.use_cache=True
         losses = dict()
+        batch_size=img.shape[0]
+        drop_mask=np.zeros(batch_size).astype('bool')
+        if self.cfg_drop_rate>0:
+            drop_mask=np.random.random(batch_size)<self.cfg_drop_rate
+            img[drop_mask]=self.learned_blank_img
         image_features=self.backbone(img)
         self.cache=image_features
-        loss_aux, logits_aux = self._auxiliary_head_forward_train(self.cache, img_metas, gt_semantic_seg)
+        loss_aux, logits_aux = self._auxiliary_head_forward_train(self.cache, img_metas, gt_semantic_seg,drop_mask)
         losses.update(loss_aux)
         uc_map=self.extract_uc(logits_aux)
+        uc_map[drop_mask]=torch.zeros_like(uc_map[0])
         loss_decode = self.train_loss(batch=dict(image=img,seg=gt_semantic_seg.squeeze(1)),return_loss=True,uc_map=uc_map)
         losses.update(loss_decode)
         self.del_cache()

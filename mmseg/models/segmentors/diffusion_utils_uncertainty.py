@@ -54,10 +54,11 @@ class DiffusionSegUC(ABC):
         adaptive_auxiliary_loss=False,
         ignore_class=255,
         t_sampler="importance",
-        schedule_params=dict(ctt_1=0.05, ctt_T=0.99999, snr_1=0.9, snr_T=0.05,cttr=0.5)
+        schedule_params=dict(ctt_1=0.05, ctt_T=0.99999, snr_1=0.9, snr_T=0.05,cttr=0.5),
+        cfg_drop_rate=0,
+        cfg=0
     ):
         super().__init__()
-
         self.loss_weights=loss_weights
         self.adaptive_auxiliary_loss=adaptive_auxiliary_loss
         self.num_classes = num_classes
@@ -71,6 +72,10 @@ class DiffusionSegUC(ABC):
         self.register_buffer('Lt_history', torch.zeros(self.num_timesteps))
         self.register_buffer('Lt_count', torch.zeros(self.num_timesteps))
         self.zero_vector = None
+        self.cfg_drop_rate=cfg_drop_rate
+        if self.cfg_drop_rate>0:
+            self.learned_blank_img=nn.Parameter(torch.zeros(3,self.img_size[0],self.img_size[1]))
+        self.cfg=cfg
 
     def alpha_schedule(self,alpha_init_type,schedule_params):
         assert alpha_init_type in ["alpha1"]
@@ -89,7 +94,7 @@ class DiffusionSegUC(ABC):
             self.register_buffer('log_cumprod_ct', log_cumprod_ct.float())
             snr = np.arange(0, time_step)/(time_step-1)*(snr_T - snr_1) + snr_1
             snr = np.concatenate(([1], snr))
-            snr = torch.tensor(snr)
+            snr = torch.from_numpy(snr).float()
             self.register_buffer('snr', snr)
             
     def modify_ctt_by_uc(self,uc,log_ctt):
@@ -317,8 +322,6 @@ class DiffusionSegUC(ABC):
         Lt2 = vb_loss.pow(2)
         Lt2_prev = self.Lt_history.gather(dim=0, index=t)
         new_Lt_history = (0.1 * Lt2 + 0.9 * Lt2_prev).detach()
-        print(self.Lt_history.dtype)
-        print(Lt2.dtype)
         self.Lt_history.scatter_(dim=0, index=t, src=new_Lt_history)
         self.Lt_count.scatter_add_(dim=0, index=t, src=torch.ones_like(Lt2))
         acc_seg=sum_except_batch((torch.argmax(log_x0_recon,dim=1)==x_start).float())/sums
@@ -368,6 +371,11 @@ class DiffusionSegUC(ABC):
         self.use_cache=True
         batch_size = image.shape[0] 
         device = self.log_at.device
+        if self.cfg>0:  ### todo 
+            real_batch_size=batch_size
+            batch_size=batch_size*2
+            image=torch.cat([image,einops.repeat(self.learned_blank_img,"C H W -> B C H W",B=real_batch_size)],dim=0)
+            uc_map=torch.cat([uc_map,torch.np.zeros_like(uc_map)],dim=0)
         if self.log_cumprod_ct[-2]>-1: ## start with all mask !
             zero_logits = torch.zeros((batch_size, self.num_classes, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
             one_logits = torch.ones((batch_size, 1, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
