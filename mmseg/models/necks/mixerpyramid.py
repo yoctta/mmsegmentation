@@ -112,7 +112,7 @@ class MixerPyramid2(nn.Module):
             outputs.append(self.img_mask_convs[i](torch.cat([image_features[i],mask_features[i]],dim=1)))
         return tuple(outputs)
 
-
+@NECKS.register_module()
 class MixerPyramidUC(nn.Module):
     """Feature2Pyramid.
 
