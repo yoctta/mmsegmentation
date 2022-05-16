@@ -100,7 +100,6 @@ class DiffusionSegUC(ABC):
 
     def extract(self, t, x_shape,uc_map):
         #### modify current noise scheduler by uncertainty.
-        uc_map=resize(uc_map,x_shape[-2:])
         scheduler_args=dict()
         with torch.no_grad():
             log_ctt=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t,x_shape,self.num_timesteps))
@@ -262,8 +261,9 @@ class DiffusionSegUC(ABC):
         log_x_start_blur=F.interpolate(log_x_start_blur,(H//4,W//4),mode='bilinear',align_corners=self.align_corners)
         log_x_start_blur=F.interpolate(log_x_start_blur,(H,W),mode='bilinear',align_corners=self.align_corners)
         log_x_start_blur = torch.log(log_x_start_blur.clamp(min=1e-30))
-        scheduler_args=self.extract(t,log_x_start.shape,uc_map)
-        scheduler_args_1=self.extract(t-1,log_x_start.shape,uc_map)
+        uc_map_up=F.interpolate(uc_map,log_x_start.shape[-2:],mode='bilinear',align_corners=self.align_corners)
+        scheduler_args=self.extract(t,log_x_start.shape,uc_map_up)
+        scheduler_args_1=self.extract(t-1,log_x_start.shape,uc_map_up)
         log_xt = self.q_sample(log_x_start=log_x_start_blur, scheduler_args=scheduler_args)
         # log_xt.data.fill_(-30.0)
         # log_xt[:,150].data.fill_(0.0)
@@ -382,16 +382,17 @@ class DiffusionSegUC(ABC):
             if diffusion_list[-1] != 0:
                 diffusion_list.append(0)
             # for diffusion_index in range(start_step-1, -1, -1):
+            uc_map_up=F.interpolate(uc_map,log_z.shape[-2:],mode='bilinear',align_corners=self.align_corners)
             for diffusion_index in diffusion_list:
                 t = torch.full((batch_size,), diffusion_index, device=device, dtype=torch.long)
                 log_x_recon = self.predict_start(log_z, image, t, uc_map)
                 if diffusion_index > skip_step:
-                    scheduler_args=self.extract(t-skip_step,log_z.shape,uc_map)
-                    scheduler_args_1=self.extract(t-skip_step-1,log_z.shape,uc_map)
+                    scheduler_args=self.extract(t-skip_step,log_z.shape,uc_map_up)
+                    scheduler_args_1=self.extract(t-skip_step-1,log_z.shape,uc_map_up)
                     model_log_prob = self.q_posterior(log_x_start=log_x_recon, log_x_t=log_z, scheduler_args=scheduler_args, scheduler_args_1=scheduler_args_1)
                 else:
-                    scheduler_args=self.extract(t,log_z.shape,uc_map)
-                    scheduler_args_1=self.extract(t-1,log_z.shape,uc_map)
+                    scheduler_args=self.extract(t,log_z.shape,uc_map_up)
+                    scheduler_args_1=self.extract(t-1,log_z.shape,uc_map_up)
                     model_log_prob = self.q_posterior(log_x_start=log_x_recon, log_x_t=log_z, scheduler_args=scheduler_args, scheduler_args_1=scheduler_args_1)
 
                 log_z = self.log_sample_categorical(model_log_prob)
