@@ -36,7 +36,8 @@ def index_to_log_onehot(x, num_classes):
 def log_onehot_to_index(log_x):
     return log_x.argmax(1)
 
-def _extract(x,t,x_shape):
+def _extract(x,t,x_shape,num_timesteps):
+    t=(t+num_timesteps+1)%(num_timesteps+1)
     b, *_ = t.shape
     out = x.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
@@ -101,11 +102,11 @@ class DiffusionSegUC(ABC):
         device=uc_map.device
         scheduler_args=dict()
         with torch.no_grad():
-            log_ctt=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t,x_shape))
-            log_ctt_next=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t+1,x_shape))
+            log_ctt=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t,x_shape,self.num_timesteps))
+            log_ctt_next=self.modify_ctt_by_uc(uc_map,_extract(self.log_cumprod_ct,t+1,x_shape,self.num_timesteps))
             log_ct=torch.log(1-(1-torch.exp(log_ctt_next))/(1-torch.exp(log_ctt)))
-            snr=_extract(self.snr,t,x_shape)
-            snr_next=_extract(self.snr,t+1,x_shape)
+            snr=_extract(self.snr,t,x_shape,self.num_timesteps)
+            snr_next=_extract(self.snr,t+1,x_shape,self.num_timesteps)
             log_1_min_cumprod_ct=log_1_min_a(log_ctt)
             log_1_min_ct=log_1_min_a(log_ct)
             log_att=log_1_min_cumprod_ct+torch.log(snr)
@@ -143,8 +144,6 @@ class DiffusionSegUC(ABC):
         return log_probs
 
     def q_pred(self, log_x_start, scheduler_args):           # q(xt|x0)
-        # log_x_start can be onehot or not
-        t = (t + (self.num_timesteps + 1))%(self.num_timesteps + 1)
         log_probs = torch.cat(
             [
                 log_add_exp(log_x_start[:,:-1,:]+scheduler_args['log_cumprod_at'], scheduler_args['log_cumprod_bt']),
