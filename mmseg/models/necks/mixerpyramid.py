@@ -83,8 +83,8 @@ class MixerPyramid(nn.Module):
         self.featurepyramid=Feature2Pyramid(embed_dim,rescales)
         self.image_convs=nn.ModuleList([nn.Conv2d(image_feature_dim,embed_dim,3,padding=1) for i in range(4)])
         self.mask_convs=nn.ModuleList([nn.Conv2d(mask_feature_dim,embed_dim,3,padding=1) for i in range(4)])
-        self.image_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
-        self.mask_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"adabatchnorm_abs") for i in range(4)])
+        self.image_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"batchnorm_abs") for i in range(4)])
+        self.mask_adanorms=nn.ModuleList([AdaNorm(embed_dim,diffusion_step,"batchnorm_abs") for i in range(4)])
 
     def forward(self, image_features, mask_features, t=None):
         outputs = []
