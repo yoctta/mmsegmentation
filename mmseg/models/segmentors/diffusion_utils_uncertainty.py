@@ -11,6 +11,10 @@ from abc import ABC, abstractmethod
 torch.autograd.set_detect_anomaly(True)
 eps = 1e-8
 
+def log_renorm(x):
+    x -= torch.logsumexp(x, dim=1, keepdim=True)
+    return x.clamp(-70, 0)
+
 def sum_except_batch(x, num_dims=1):
     return x.reshape(*x.shape[:num_dims], -1).sum(-1)
 
@@ -371,11 +375,11 @@ class DiffusionSegUC(ABC):
         self.use_cache=True
         batch_size = image.shape[0] 
         device = self.log_at.device
-        # if self.cfg>0:  ### todo 
-        #     real_batch_size=batch_size
-        #     batch_size=batch_size*2
-        #     image=torch.cat([image,einops.repeat(self.learned_blank_img,"C H W -> B C H W",B=real_batch_size)],dim=0)
-        #     uc_map=torch.cat([uc_map,torch.np.zeros_like(uc_map)],dim=0)
+        real_batch_size=batch_size
+        if self.cfg>0:  ### todo 
+            batch_size=batch_size*2
+            image=torch.cat([image,einops.repeat(self.learned_blank_img,"C H W -> B C H W",B=real_batch_size)],dim=0)
+            uc_map=torch.cat([uc_map,torch.np.zeros_like(uc_map)],dim=0)
         if self.log_cumprod_ct[-2]>-1: ## start with all mask !
             zero_logits = torch.zeros((batch_size, self.num_classes, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
             one_logits = torch.ones((batch_size, 1, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
@@ -396,6 +400,8 @@ class DiffusionSegUC(ABC):
             for diffusion_index in diffusion_list:
                 t = torch.full((batch_size,), diffusion_index, device=device, dtype=torch.long)
                 log_x_recon = self.predict_start(log_z, image, t, uc_map)
+                if self.cfg>0:
+                    log_x_recon[:real_batch_size,:-1]=log_renorm(log_x_recon[:real_batch_size,:-1]*(1+self.cfg)-self.cfg*log_x_recon[real_batch_size:,:-1])
                 if diffusion_index > skip_step:
                     scheduler_args=self.extract(t-skip_step,log_z.shape,uc_map_up)
                     scheduler_args_1=self.extract(t-skip_step-1,log_z.shape,uc_map_up)
@@ -410,9 +416,9 @@ class DiffusionSegUC(ABC):
                     call_back(log_z=log_z,log_x_recon=log_x_recon,t=t,x_recon=log_onehot_to_index(log_x_recon[:,:-1]))
 
         self.del_cache()
-        content_token = log_onehot_to_index(log_x_recon)
+        content_token = log_onehot_to_index(log_x_recon[:real_batch_size])
         
         output = {'pred_seg': content_token}
         if return_logits:
-            output['logits'] = torch.exp(log_z)
+            output['logits'] = torch.exp(log_z[:real_batch_size])
         return output

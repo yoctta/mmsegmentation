@@ -48,8 +48,8 @@ def index_to_log_onehot(x, num_classes):
 
 def mod_log_z_by_uc(log_z,uc,t,log_cumprod_ct,x_recon):
     ctt=torch.exp(log_cumprod_ct[t-1]).item()
-    gate=torch.quantile(uc, ctt)
-    to_mask=uc<gate
+    gate=torch.quantile(uc, 1-ctt)
+    to_mask=uc>gate
     mask=torch.zeros_like(log_z)
     mask[:,-1]=1
     mask = torch.log(mask.clamp(min=1e-30))
