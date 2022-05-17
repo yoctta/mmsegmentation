@@ -49,7 +49,7 @@ def index_to_log_onehot(x, num_classes):
 
 def mod_log_z_by_uc(log_z,uc,t,log_cumprod_ct,x_recon):
     B,C,H,W=uc.shape
-    size=(16,16)
+    size=(4,4)
     uc=F.unfold(uc,size,stride=size)
     uc=einops.rearrange(uc,"B (h w) (H W) -> (B H W) (h w)",h=size[0],w=size[1],H=H//size[0],W=W//size[1])
     ctt=torch.exp(log_cumprod_ct[t-1]).item()
