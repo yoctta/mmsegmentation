@@ -55,12 +55,12 @@ def mod_log_z_by_uc(log_z,uc,t,log_cumprod_ct,x_recon):
     ctt=torch.exp(log_cumprod_ct[t-1]).item()
     gate=torch.quantile(uc, 1-ctt,dim=1,keepdim=True)
     to_mask=uc>gate
-    to_mask=einops.rearrange(to_mask,"(B H W) (h w) -> B (h w) (H W)",h=size[0],w=size[1],H=H//size[0],W=W//size[1])
+    to_mask=einops.rearrange(to_mask.float(),"(B H W) (h w) -> B (h w) (H W)",h=size[0],w=size[1],H=H//size[0],W=W//size[1])
     to_mask=F.fold(to_mask,(H,W),size,stride=size)
     mask=torch.zeros_like(log_z)
     mask[:,-1]=1
     mask = torch.log(mask.clamp(min=1e-30))
-    p=to_mask*mask+(~to_mask)*index_to_log_onehot(x_recon,log_z.shape[1])
+    p=to_mask*mask+(1-to_mask)*index_to_log_onehot(x_recon,log_z.shape[1])
     log_z.data.copy_(p)
 
 # def extract_uc(logits_aux):
