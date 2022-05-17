@@ -295,4 +295,4 @@ if __name__=="__main__":
     mp.set_start_method('spawn',force=True)
     world_size=torch.cuda.device_count()
     mp.spawn(worker,nprocs=world_size,args=(args.config,args.checkpoint,args.out_dir,world_size),daemon=False)
-    eval(config,out_dir)
+    eval(args.config,args.out_dir)

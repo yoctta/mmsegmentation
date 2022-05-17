@@ -371,11 +371,11 @@ class DiffusionSegUC(ABC):
         self.use_cache=True
         batch_size = image.shape[0] 
         device = self.log_at.device
-        if self.cfg>0:  ### todo 
-            real_batch_size=batch_size
-            batch_size=batch_size*2
-            image=torch.cat([image,einops.repeat(self.learned_blank_img,"C H W -> B C H W",B=real_batch_size)],dim=0)
-            uc_map=torch.cat([uc_map,torch.np.zeros_like(uc_map)],dim=0)
+        # if self.cfg>0:  ### todo 
+        #     real_batch_size=batch_size
+        #     batch_size=batch_size*2
+        #     image=torch.cat([image,einops.repeat(self.learned_blank_img,"C H W -> B C H W",B=real_batch_size)],dim=0)
+        #     uc_map=torch.cat([uc_map,torch.np.zeros_like(uc_map)],dim=0)
         if self.log_cumprod_ct[-2]>-1: ## start with all mask !
             zero_logits = torch.zeros((batch_size, self.num_classes, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
             one_logits = torch.ones((batch_size, 1, image.shape[2]//downsample,image.shape[3]//downsample),device=device)
