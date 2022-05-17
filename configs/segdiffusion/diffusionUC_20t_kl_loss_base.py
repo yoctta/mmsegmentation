@@ -32,19 +32,19 @@ model = dict(
         num_layers=4,
         num_heads=12,
         mlp_ratio=4,
-        out_indices=(-1,-1,-1,-1)
+        out_indices=(0,1,2,3)
     ),
     mixer=dict(
         type='MixerPyramidUC',
         image_feature_dim=768,
         mask_feature_dim=768,
-        embed_dim=768,
+        embed_dim=2048,
         rescales=[4, 2, 1, 0.5],
         uc_map_weight=0
     ),
     decode_head=dict(
         type='UPerHead',
-        in_channels=[768, 768, 768, 768],
+        in_channels=[2048, 2048, 2048, 2048],
         in_index=[0, 1, 2, 3],
         pool_scales=(1, 2, 3, 6),
         channels=768,
