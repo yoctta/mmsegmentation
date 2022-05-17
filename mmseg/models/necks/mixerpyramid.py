@@ -132,8 +132,10 @@ class MixerPyramidUC(nn.Module):
                  embed_dim,
                  diffusion_step=0,
                  rescales=[4, 2, 1, 0.5],
-                 uc_map_weight=1):
+                 uc_map_weight=1,
+                 mask_feature_weight=0.5):
         super().__init__()
+        self.mask_feature_weight=mask_feature_weight
         self.featurepyramid=Feature2Pyramid(embed_dim,rescales)
         self.image_convs=nn.ModuleList([nn.Conv2d(image_feature_dim,embed_dim,3,padding=1) for i in range(4)])
         self.mask_convs=nn.ModuleList([nn.Conv2d(mask_feature_dim,embed_dim,3,padding=1) for i in range(4)])
@@ -144,5 +146,5 @@ class MixerPyramidUC(nn.Module):
     def forward(self, image_features, mask_features, t=None, uc_map=None):
         outputs = []
         for i in range(len(image_features)):
-            outputs.append(0.5*self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+0.5*(1-uc_map*self.uc_map_weight)*self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t))
+            outputs.append((1-self.mask_feature_weight)*self.image_adanorms[i](self.image_convs[i](image_features[i]),t)+self.mask_feature_weight*(1-uc_map*self.uc_map_weight)*self.mask_adanorms[i](self.mask_convs[i](mask_features[i]),t))
         return tuple(self.featurepyramid(outputs))

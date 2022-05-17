@@ -333,7 +333,7 @@ class DiffusionSegUC(ABC):
 
 
     def device(self):
-        return self.log_at.device
+        return self.log_cumprod_ct.device
 
     def train_loss(
             self, 
