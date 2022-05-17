@@ -374,7 +374,7 @@ class DiffusionSegUC(ABC):
             **kwargs):
         self.use_cache=True
         batch_size = image.shape[0] 
-        device = self.log_at.device
+        device = self.device()
         real_batch_size=batch_size
         if self.cfg>0:  ### todo 
             batch_size=batch_size*2
