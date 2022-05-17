@@ -41,7 +41,7 @@ model = dict(
         embed_dim=2048,
         rescales=[4, 2, 1, 0.5],
         uc_map_weight=0,
-        mask_feature_weight=0.01
+        mask_feature_weight=0.0
     ),
     decode_head=dict(
         type='UPerHead',

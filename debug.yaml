@@ -53,7 +53,7 @@ jobs:
   sku: 1x G8
   command:
   - env
-  - cd /mnt/home/mmsegmentation/; python show_diffusion.py --out_dir work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/visualize_data3 
+  - cd /mnt/home/mmsegmentation/; python show_diffusion.py --out_dir work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/visualize_data4
   submit_args:
     container_args:
       shm_size: 512g
