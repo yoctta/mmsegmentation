@@ -35,7 +35,7 @@ model = dict(
         out_indices=(-1,-1,-1,-1)
     ),
     mixer=dict(
-        type='MixerPyramidUC',
+        type='MixerPyramid',
         image_feature_dim=768,
         mask_feature_dim=768,
         embed_dim=768,
