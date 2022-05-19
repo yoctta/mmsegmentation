@@ -53,7 +53,7 @@ model = dict(
         align_corners=False
     ),
     auxiliary_head=dict(
-        type='FCNHeadUC',
+        type='FCNHead',
         in_channels=768,
         in_index=2,
         channels=256,
