@@ -48,7 +48,7 @@ model = dict(
         pool_scales=(1, 2, 3, 6),
         channels=768,
         dropout_ratio=0.1,
-        num_classes=150,
+        num_classes=300,
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         align_corners=False
     ),
