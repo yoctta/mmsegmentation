@@ -39,8 +39,7 @@ model = dict(
         image_feature_dim=768,
         mask_feature_dim=768,
         embed_dim=768,
-        rescales=[4, 2, 1, 0.5],
-        uc_map_weight=1
+        rescales=[4, 2, 1, 0.5]
     ),
     decode_head=dict(
         type='UPerHead',
