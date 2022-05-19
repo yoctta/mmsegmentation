@@ -1114,7 +1114,7 @@ class GaussianDiffusionSeg(ABC):
         if isinstance(self.schedule_sampler, LossAwareSampler):
                 self.schedule_sampler.update_with_local_losses(t, loss.detach())
         out['loss'] = torch.mean(loss*weights)
-        out['acc_seg']=torch.mean((torch.argmax(terms['logits'],dim=1)==batch['seg']))
+        out['acc_seg']=torch.mean((torch.argmax(terms['logits'],dim=1)==batch['seg']).float())
         return out
 
     def class1hot(self,x):
