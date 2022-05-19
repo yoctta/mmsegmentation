@@ -58,7 +58,6 @@ class GaussianDiffusionEncoderDecoder(BaseSegmentor,GaussianDiffusionSeg):
         """the decode head use mixed mask and image features for predict mask, the model doesn't depend on t, so we can use mmseg models"""
         self.decode_head = builder.build_head(decode_head)
         self.align_corners = self.decode_head.align_corners
-        self.num_classes = self.decode_head.num_classes
 
     def _init_auxiliary_head(self, auxiliary_head):
         """the uxiliary head use only image features for predict mask"""
