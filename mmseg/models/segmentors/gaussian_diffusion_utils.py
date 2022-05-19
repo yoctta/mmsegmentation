@@ -191,7 +191,7 @@ class GaussianDiffusionSeg(ABC):
         self,
         *,
         sched_name,
-        num_timesteps,
+        diffusion_step,
         model_mean_type="EPSILON",
         model_var_type="LEARNED_RANGE",
         loss_type="MSE",
@@ -208,7 +208,7 @@ class GaussianDiffusionSeg(ABC):
         self.rescale_timesteps = rescale_timesteps
         self.ignore_class=ignore_class
         # Use float64 for accuracy.
-        betas=get_named_beta_schedule(sched_name,num_timesteps)
+        betas=get_named_beta_schedule(sched_name,diffusion_step)
         betas = np.array(betas, dtype=np.float64)
         self.betas = betas
         assert len(betas.shape) == 1, "betas must be 1-D"

@@ -71,7 +71,7 @@ model = dict(
     test_cfg=dict(mode='slide', crop_size=(512, 512), stride=(426, 426)),
     diffusion_cfg=dict(
         sched_name="squaredcos_cap_v2",
-        num_timesteps=1000,
+        diffusion_step=1000,
         model_mean_type="EPSILON",
         model_var_type="LEARNED_RANGE",
         loss_type="MSE",
