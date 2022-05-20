@@ -239,7 +239,7 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 img_show = img[:h, :w, :]
                 ori_h, ori_w = img_meta['ori_shape'][:-1]
                 #uc_map=[resize(extract_uc(i), (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners) for i in xs]
-                uc_map=[resize(merge_fn([resize(i,model.test_cfg.crop_size,mode='bilinear',align_corners=model.align_corners) for i in uc_map])[:,:1],(ori_h, ori_w),mode='bilinear',align_corners=model.align_corners)]
+                uc_map=[resize(merge_fn([resize(i,model.test_cfg.crop_size,mode='bilinear',align_corners=model.align_corners) for i in temp_uc])[:,:1],(ori_h, ori_w),mode='bilinear',align_corners=model.align_corners)]
                 img_show = mmcv.imresize(img_show, (ori_w, ori_h))
                 showed_gt=model.show_result(img_show,gt,opacity=opacity)
                 xs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in xs]
