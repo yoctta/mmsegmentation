@@ -241,7 +241,7 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 #uc_map=[resize(extract_uc(i), (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners) for i in xs]
                 uc_map=[resize(merge_fn([resize(i,model.test_cfg.crop_size,mode='bilinear',align_corners=model.align_corners) for i in temp_uc])[:,:1],(ori_h, ori_w),mode='bilinear',align_corners=model.align_corners)]
                 img_show = mmcv.imresize(img_show, (ori_w, ori_h))
-                showed_gt=model.show_result(img_show,gt,opacity=opacity)
+                #showed_gt=model.show_result(img_show,gt,opacity=opacity)
                 xs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in xs]
                 zs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in zs]
                 errs=[(i!=gt) & (gt !=255) for i in xs]
@@ -257,7 +257,7 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 cv2.imwrite("%s/%s_seg.png"%(out_dir,counter),showed_img_out)
                 to_save['seg']=showed_img_out
                 ### gt
-                cv2.imwrite("%s/%s_seg_gt.png"%(out_dir,counter),showed_gt)
+                #cv2.imwrite("%s/%s_seg_gt.png"%(out_dir,counter),showed_gt)
                 ### zt
                 showed_zt_out=make_grid([model.show_result(img_show,i,opacity=opacity) for i in zs])
                 cv2.imwrite("%s/%s_zt.png"%(out_dir,counter),showed_zt_out)

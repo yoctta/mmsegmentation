@@ -1,0 +1,91 @@
+target:
+  service: aml
+  subscription_id: 98c1805a-6004-4afd-97f3-ae044be4f3eb
+  resource_group: face-aml-a
+  workspace_name: face-aml-a
+  cluster: V100
+
+environment:
+  image: yoctta/py3x:latest
+
+storage:
+  data:
+    storage_account_name: facevcstandard
+    container_name: v-xiaodo
+    mount_dir: /mnt/blob
+
+code:
+  local_dir: $CONFIG_DIR/bounce/
+
+jobs:
+- name: bounce1
+  sku: 1x G8
+  command:
+  - env
+  - bash bounce.sh 22001 42209 10.226.99.37 
+  - sleep 7d
+
+  submit_args:
+    container_args:
+      shm_size: 512g
+    env:      
+      MKL_THREADING_LAYER: GNU
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_TIMEOUT: 22
+  aml_mpirun:
+    process_count_per_node: 0
+    communicator: "OpenMpi"
+
+- name: bounce2
+  sku: 1x G8
+  command:
+  - env
+  - bash bounce.sh 22002 42209 10.226.99.37 
+  - sleep 7d
+
+  submit_args:
+    container_args:
+      shm_size: 512g
+    env:      
+      MKL_THREADING_LAYER: GNU
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_TIMEOUT: 22
+  aml_mpirun:
+    process_count_per_node: 0
+    communicator: "OpenMpi"
+
+- name: bounce3
+  sku: 1x G8
+  command:
+  - env
+  - bash bounce.sh 22003 42209 10.226.99.37 
+  - sleep 7d
+
+  submit_args:
+    container_args:
+      shm_size: 512g
+    env:      
+      MKL_THREADING_LAYER: GNU
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_TIMEOUT: 22
+  aml_mpirun:
+    process_count_per_node: 0
+    communicator: "OpenMpi"
+
+- name: bounce4
+  sku: 1x G8
+  command:
+  - env
+  - bash bounce.sh 22004 42209 10.226.99.37 
+  - sleep 7d
+
+  submit_args:
+    container_args:
+      shm_size: 512g
+    env:      
+      MKL_THREADING_LAYER: GNU
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_TIMEOUT: 22
+  aml_mpirun:
+    process_count_per_node: 0
+    communicator: "OpenMpi"
