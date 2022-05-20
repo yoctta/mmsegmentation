@@ -108,7 +108,6 @@ class GaussianDiffusionEncoderDecoder(BaseSegmentor,GaussianDiffusionSeg):
         map of the same size as input."""
         B,C,H,W=img.shape
         out = self.p_sample_loop(
-        self,
         self._model,
         [B,self.num_classes,H,W],
         noise=None,
