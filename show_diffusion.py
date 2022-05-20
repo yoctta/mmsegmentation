@@ -48,6 +48,7 @@ def index_to_log_onehot(x, num_classes):
 #     log_z.data.copy_(p)
 
 def mod_log_z_by_uc(log_z,uc,t,log_cumprod_ct,x_recon):
+    return
     B,C,H,W=uc.shape
     size=(4,4)
     uc=F.unfold(uc,size,stride=size)
@@ -73,7 +74,9 @@ def mod_log_z_by_uc(log_z,uc,t,log_cumprod_ct,x_recon):
 #     uc_map=torch.einsum("abcde,abcde->ade",x,logits_aux)/9
 #     return uc_map.unsqueeze(1)
 
-def extract_uc(logits_aux):
+def extract_uc(logits_aux,model):
+    if hasattr(model,"extract_uc"):
+        return model.extract_uc(logits_aux)
     uc_map=1-torch.max(logits_aux,dim=1)[0]
     return uc_map.unsqueeze(1)
 
@@ -206,19 +209,21 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 zs=[[] for i in range(len(crop_images))]
                 xs=[[] for i in range(len(crop_images))]
                 outs=[]
-                temp_uc=[0]
+                temp_uc=[0 for i in range(crop_images)]
                 for i in range(len(crop_images)):
                     def call_back(log_z,log_x_recon,t,x_recon,**args):
                         ts[i].append(t[0].item())
                         xs[i].append(resize(input=torch.exp(log_x_recon),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
                         if inference_with_uc:
                             if ts[i][-1]==19:
-                                temp_uc_=extract_uc(xs[i][-1])
-                                temp_uc[0]=temp_uc_/temp_uc_.max()
-                            mod_log_z_by_uc(log_z,temp_uc[0],ts[i][-1],model.log_cumprod_ct,x_recon)
+                                #aux_logits=xs[i][-1]
+                                aux_logits=model.auxiliary_head.forward(model.cache)
+                                temp_uc[i]=extract_uc(aux_logits,model)
+                                #temp_uc[0]=temp_uc_/temp_uc_.max()
+                            mod_log_z_by_uc(log_z,temp_uc[i],ts[i][-1],model.log_cumprod_ct,x_recon)
                         zs[i].append(resize(input=torch.exp(log_z),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
                         
-                    out = model.sample(crop_images[i],return_logits = True,call_back=call_back)
+                    out = model.sample(crop_images[i],return_logits = True,call_back=call_back,uc_map=temp_uc[0])
                     out = out['logits']
                     out = resize(input=out,size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners)
                     outs.append(out)
@@ -231,7 +236,8 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 h, w, _ = img_meta['img_shape']
                 img_show = img[:h, :w, :]
                 ori_h, ori_w = img_meta['ori_shape'][:-1]
-                uc_map=[resize(extract_uc(i), (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners) for i in xs]
+                #uc_map=[resize(extract_uc(i), (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners) for i in xs]
+                uc_map=[resize(merge_fn(temp_uc)[:,:1],(ori_h, ori_w),mode='bilinear',align_corners=model.align_corners)]
                 img_show = mmcv.imresize(img_show, (ori_w, ori_h))
                 showed_gt=model.show_result(img_show,gt,opacity=opacity)
                 xs=[torch.argmax(resize(i, (ori_h, ori_w),mode='bilinear',align_corners=model.align_corners),1).cpu() for i in xs]
