@@ -26,7 +26,7 @@ config="configs/segdiffusion/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss.p
 checkpoint="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/iter_160000.pth"
 out_dir="work_dirs/upernet_beit-base_512x512_160k_ade20k_20t_kl_loss/visualize_data"
 base="base_512x512_160k_ade20k_20t_kl_loss"
-inference_with_uc=True
+inference_with_uc=False
 
 def index_to_log_onehot(x, num_classes):
     assert x.max().item() < num_classes, \
@@ -216,14 +216,16 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                         xs[i].append(resize(input=torch.exp(log_x_recon),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
                         if inference_with_uc:
                             if ts[i][-1]==19:
-                                #aux_logits=xs[i][-1]
-                                aux_logits=model.auxiliary_head.forward(model.cache)
+                                aux_logits=xs[i][-1]
                                 temp_uc[i]=extract_uc(aux_logits,model)
-                                #temp_uc[0]=temp_uc_/temp_uc_.max()
+                                #temp_uc[i]=temp_uc_/temp_uc_.max()
                             mod_log_z_by_uc(log_z,temp_uc[i],ts[i][-1],model.log_cumprod_ct,x_recon)
                         zs[i].append(resize(input=torch.exp(log_z),size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners))
-                        
-                    out = model.sample(crop_images[i],return_logits = True,call_back=call_back,uc_map=temp_uc[0])
+                    image_features=model.backbone(crop_images[i])
+                    model.cache=image_features
+                    aux_logits=model.auxiliary_head.forward(image_features)
+                    temp_uc[i]=extract_uc(aux_logits,model)    
+                    out = model.sample(crop_images[i],return_logits = True,call_back=call_back,uc_map=temp_uc[i])
                     out = out['logits']
                     out = resize(input=out,size=crop_images[0].shape[2:],mode='bilinear',align_corners=model.align_corners)
                     outs.append(out)
