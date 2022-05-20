@@ -209,7 +209,7 @@ def single_gpu_test(model,data_loader,out_dir,opacity=0.5,world_size=1,rank=0):
                 zs=[[] for i in range(len(crop_images))]
                 xs=[[] for i in range(len(crop_images))]
                 outs=[]
-                temp_uc=[0 for i in range(crop_images)]
+                temp_uc=[0 for i in range(len(crop_images))]
                 for i in range(len(crop_images)):
                     def call_back(log_z,log_x_recon,t,x_recon,**args):
                         ts[i].append(t[0].item())
