@@ -107,18 +107,30 @@ class GaussianDiffusionEncoderDecoder(BaseSegmentor,GaussianDiffusionSeg):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
         B,C,H,W=img.shape
-        out = self.p_sample_loop(
-        self._model,
-        [B,self.num_classes,H,W],
-        noise=None,
-        clip_denoised=True,
-        denoised_fn=None,
-        cond_fn=None,
-        model_kwargs={"image":img},
-        device=None,
-        progress=False,
-        call_back=None,
-        start_step=None
+        # out = self.p_sample_loop(
+        # self._model,
+        # [B,self.num_classes,H,W],
+        # noise=None,
+        # clip_denoised=True,
+        # denoised_fn=None,
+        # cond_fn=None,
+        # model_kwargs={"image":img},
+        # device=None,
+        # progress=False,
+        # call_back=None,
+        # start_step=None
+        # )
+        out = self.ddim_sample_loop(
+            self._model,
+            [B,self.num_classes,H,W],
+            noise=None,
+            clip_denoised=True,
+            denoised_fn=None,
+            cond_fn=None,
+            model_kwargs={"image":img},
+            device=None,
+            progress=False,
+            eta=0.0,
         )
         out = torch.softmax(out,dim=1)
         out = resize(

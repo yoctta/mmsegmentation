@@ -12,6 +12,67 @@ import torch.distributed as dist
 torch.autograd.set_detect_anomaly(True)
 eps = 1e-8
 
+def space_timesteps(num_timesteps, section_counts):
+    """
+    Create a list of timesteps to use from an original diffusion process,
+    given the number of timesteps we want to take from equally-sized portions
+    of the original process.
+
+    For example, if there's 300 timesteps and the section counts are [10,15,20]
+    then the first 100 timesteps are strided to be 10 timesteps, the second 100
+    are strided to be 15 timesteps, and the final 100 are strided to be 20.
+
+    If the stride is a string starting with "ddim", then the fixed striding
+    from the DDIM paper is used, and only one section is allowed.
+
+    :param num_timesteps: the number of diffusion steps in the original
+                          process to divide up.
+    :param section_counts: either a list of numbers, or a string containing
+                           comma-separated numbers, indicating the step count
+                           per section. As a special case, use "ddimN" where N
+                           is a number of steps to use the striding from the
+                           DDIM paper.
+    :return: a set of diffusion steps from the original process to use.
+    """
+    if isinstance(section_counts, str):
+        if section_counts.startswith("ddim"):
+            desired_count = int(section_counts[len("ddim") :])
+            for i in range(1, num_timesteps):
+                if len(range(0, num_timesteps, i)) == desired_count:
+                    return set(range(0, num_timesteps, i))
+            raise ValueError(
+                f"cannot create exactly {num_timesteps} steps with an integer stride"
+            )
+        elif section_counts == "fast27":
+            steps = space_timesteps(num_timesteps, "10,10,3,2,2")
+            # Help reduce DDIM artifacts from noisiest timesteps.
+            steps.remove(num_timesteps - 1)
+            steps.add(num_timesteps - 3)
+            return steps
+        section_counts = [int(x) for x in section_counts.split(",")]
+    size_per = num_timesteps // len(section_counts)
+    extra = num_timesteps % len(section_counts)
+    start_idx = 0
+    all_steps = []
+    for i, section_count in enumerate(section_counts):
+        size = size_per + (1 if i < extra else 0)
+        if size < section_count:
+            raise ValueError(
+                f"cannot divide section of {size} steps into {section_count}"
+            )
+        if section_count <= 1:
+            frac_stride = 1
+        else:
+            frac_stride = (size - 1) / (section_count - 1)
+        cur_idx = 0.0
+        taken_steps = []
+        for _ in range(section_count):
+            taken_steps.append(start_idx + round(cur_idx))
+            cur_idx += frac_stride
+        all_steps += taken_steps
+        start_idx += size
+    return set(all_steps)
+
 def create_named_schedule_sampler(name, diffusion):
     """
     Create a ScheduleSampler from a library of pre-defined samplers.
@@ -323,20 +384,57 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
         res = res[..., None]
     return res.expand(broadcast_shape)
 
+def apply_betas(self,betas):
+    self.betas = betas
+    self.log_betas=np.log(self.betas)
+    assert len(betas.shape) == 1, "betas must be 1-D"
+    assert (betas > 0).all() and (betas <= 1).all()
+    self.num_timesteps = int(betas.shape[0])
+    self.schedule_sampler=create_named_schedule_sampler("loss-second-moment",self.num_timesteps)
+    alphas = 1.0 - betas
+    self.alphas_cumprod = np.cumprod(alphas, axis=0)
+    self.alphas_cumprod_prev = np.append(1.0, self.alphas_cumprod[:-1])
+    self.alphas_cumprod_next = np.append(self.alphas_cumprod[1:], 0.0)
+    assert self.alphas_cumprod_prev.shape == (self.num_timesteps,)
 
+    # calculations for diffusion q(x_t | x_{t-1}) and others
+    self.sqrt_alphas_cumprod = np.sqrt(self.alphas_cumprod)
+    self.sqrt_one_minus_alphas_cumprod = np.sqrt(1.0 - self.alphas_cumprod)
+    self.log_one_minus_alphas_cumprod = np.log(1.0 - self.alphas_cumprod)
+    self.sqrt_recip_alphas_cumprod = np.sqrt(1.0 / self.alphas_cumprod)
+    self.sqrt_recipm1_alphas_cumprod = np.sqrt(1.0 / self.alphas_cumprod - 1)
+
+    # calculations for posterior q(x_{t-1} | x_t, x_0)
+    self.posterior_variance = (
+        betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
+    )
+    # log calculation clipped because the posterior variance is 0 at the
+    # beginning of the diffusion chain.
+    self.posterior_log_variance_clipped = np.log(
+        np.append(self.posterior_variance[1], self.posterior_variance[1:])
+    )
+    self.posterior_mean_coef1 = (
+        betas * np.sqrt(self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
+    )
+    self.posterior_mean_coef2 = (
+        (1.0 - self.alphas_cumprod_prev)
+        * np.sqrt(alphas)
+        / (1.0 - self.alphas_cumprod)
+    )
 
 class GaussianDiffusionSeg(ABC):
     def __init__(
         self,
         *,
-        sched_name,
-        diffusion_step,
+        sched_name="squaredcos_cap_v2",
+        diffusion_step=1000,
         model_mean_type="EPSILON",
         model_var_type="LEARNED_RANGE",
         loss_type="MSE",
         ignore_class=255,
         num_classes=150,
-        rescale_timesteps=False
+        timestep_respacing="ddim100",
+        rescale_timesteps=None,
     ):
         super().__init__()
 
@@ -346,46 +444,27 @@ class GaussianDiffusionSeg(ABC):
         self.loss_type = loss_type
         self.rescale_timesteps = rescale_timesteps
         self.ignore_class=ignore_class
+        self.use_timesteps = set(space_timesteps(diffusion_step, timestep_respacing))
         # Use float64 for accuracy.
         betas=get_named_beta_schedule(sched_name,diffusion_step)
         betas = np.array(betas, dtype=np.float64)
-        self.betas = betas
-        assert len(betas.shape) == 1, "betas must be 1-D"
-        assert (betas > 0).all() and (betas <= 1).all()
-        self.num_timesteps = int(betas.shape[0])
-        self.schedule_sampler=create_named_schedule_sampler("loss-second-moment",self.num_timesteps)
-        alphas = 1.0 - betas
-        self.alphas_cumprod = np.cumprod(alphas, axis=0)
-        self.alphas_cumprod_prev = np.append(1.0, self.alphas_cumprod[:-1])
-        self.alphas_cumprod_next = np.append(self.alphas_cumprod[1:], 0.0)
-        assert self.alphas_cumprod_prev.shape == (self.num_timesteps,)
-
-        # calculations for diffusion q(x_t | x_{t-1}) and others
-        self.sqrt_alphas_cumprod = np.sqrt(self.alphas_cumprod)
-        self.sqrt_one_minus_alphas_cumprod = np.sqrt(1.0 - self.alphas_cumprod)
-        self.log_one_minus_alphas_cumprod = np.log(1.0 - self.alphas_cumprod)
-        self.sqrt_recip_alphas_cumprod = np.sqrt(1.0 / self.alphas_cumprod)
-        self.sqrt_recipm1_alphas_cumprod = np.sqrt(1.0 / self.alphas_cumprod - 1)
-
-        # calculations for posterior q(x_{t-1} | x_t, x_0)
-        self.posterior_variance = (
-            betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
-        )
-        # log calculation clipped because the posterior variance is 0 at the
-        # beginning of the diffusion chain.
-        self.posterior_log_variance_clipped = np.log(
-            np.append(self.posterior_variance[1], self.posterior_variance[1:])
-        )
-        self.posterior_mean_coef1 = (
-            betas * np.sqrt(self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
-        )
-        self.posterior_mean_coef2 = (
-            (1.0 - self.alphas_cumprod_prev)
-            * np.sqrt(alphas)
-            / (1.0 - self.alphas_cumprod)
-        )
-
-
+        apply_betas(self,betas)
+        self.timestep_map = []
+        last_alpha_cumprod = 1.0
+        new_betas = []
+        for i, alpha_cumprod in enumerate(self.alphas_cumprod):
+            if i in self.use_timesteps:
+                new_betas.append(1 - alpha_cumprod / last_alpha_cumprod)
+                last_alpha_cumprod = alpha_cumprod
+                self.timestep_map.append(i)
+        self.inference_sampler=type('inference_sampler',(),{})
+        apply_betas(self.inference_sampler,new_betas)
+    
+    def select(self,name):
+        if self.training:
+            return getattr(self,name)
+        else:
+            return getattr(self.inference_sampler,name)
 
 
     @abstractmethod
@@ -403,11 +482,11 @@ class GaussianDiffusionSeg(ABC):
         :return: A tuple (mean, variance, log_variance), all of x_start's shape.
         """
         mean = (
-            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
+            _extract_into_tensor(self.select('sqrt_alphas_cumprod'), t, x_start.shape) * x_start
         )
-        variance = _extract_into_tensor(1.0 - self.alphas_cumprod, t, x_start.shape)
+        variance = _extract_into_tensor(1.0-self.select('alphas_cumprod'), t, x_start.shape)
         log_variance = _extract_into_tensor(
-            self.log_one_minus_alphas_cumprod, t, x_start.shape
+            self.select('log_one_minus_alphas_cumprod'), t, x_start.shape
         )
         return mean, variance, log_variance
 
@@ -426,8 +505,8 @@ class GaussianDiffusionSeg(ABC):
             noise = torch.randn_like(x_start)
         assert noise.shape == x_start.shape
         return (
-            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-            + _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
+            _extract_into_tensor(self.select('sqrt_alphas_cumprod'), t, x_start.shape) * x_start
+            + _extract_into_tensor(self.select('sqrt_one_minus_alphas_cumprod'), t, x_start.shape)
             * noise
         )
 
@@ -440,12 +519,12 @@ class GaussianDiffusionSeg(ABC):
         """
         assert x_start.shape == x_t.shape
         posterior_mean = (
-            _extract_into_tensor(self.posterior_mean_coef1, t, x_t.shape) * x_start
-            + _extract_into_tensor(self.posterior_mean_coef2, t, x_t.shape) * x_t
+            _extract_into_tensor(self.select('posterior_mean_coef1'), t, x_t.shape) * x_start
+            + _extract_into_tensor(self.select('posterior_mean_coef2'), t, x_t.shape) * x_t
         )
-        posterior_variance = _extract_into_tensor(self.posterior_variance, t, x_t.shape)
+        posterior_variance = _extract_into_tensor(self.select('posterior_variance'), t, x_t.shape)
         posterior_log_variance_clipped = _extract_into_tensor(
-            self.posterior_log_variance_clipped, t, x_t.shape
+            self.select('posterior_log_variance_clipped'), t, x_t.shape
         )
         assert (
             posterior_mean.shape[0]
@@ -493,9 +572,9 @@ class GaussianDiffusionSeg(ABC):
                 model_variance = torch.exp(model_log_variance)
             else:
                 min_log = _extract_into_tensor(
-                    self.posterior_log_variance_clipped, t, x.shape
+                    self.select('posterior_log_variance_clipped'), t, x.shape
                 )
-                max_log = _extract_into_tensor(np.log(self.betas), t, x.shape)
+                max_log = _extract_into_tensor(self.select('log_betas'), t, x.shape)
                 # The model_var_values is [-1, 1] for [min_var, max_var].
                 frac = (model_var_values + 1) / 2
                 model_log_variance = frac * max_log + (1 - frac) * min_log
@@ -505,12 +584,12 @@ class GaussianDiffusionSeg(ABC):
                 # for fixedlarge, we set the initial (log-)variance like so
                 # to get a better decoder log likelihood.
                 "FIXED_LARGE": (
-                    np.append(self.posterior_variance[1], self.betas[1:]),
-                    np.log(np.append(self.posterior_variance[1], self.betas[1:])),
+                    np.append(self.select('posterior_variance')[1], self.select('betas')[1:]),
+                    np.log(np.append(self.select('posterior_variance')[1], self.select('betas')[1:])),
                 ),
                 "FIXED_SMALL": (
-                    self.posterior_variance,
-                    self.posterior_log_variance_clipped,
+                    self.select('posterior_variance'),
+                    self.select('posterior_log_variance_clipped'),
                 ),
             }[self.model_var_type]
             model_variance = _extract_into_tensor(model_variance, t, x.shape)
@@ -554,25 +633,25 @@ class GaussianDiffusionSeg(ABC):
     def _predict_xstart_from_eps(self, x_t, t, eps):
         assert x_t.shape == eps.shape
         return (
-            _extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
-            - _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * eps
+            _extract_into_tensor(self.select('sqrt_recip_alphas_cumprod'), t, x_t.shape) * x_t
+            - _extract_into_tensor(self.select('sqrt_recipm1_alphas_cumprod'), t, x_t.shape) * eps
         )
 
     def _predict_xstart_from_xprev(self, x_t, t, xprev):
         assert x_t.shape == xprev.shape
         return (  # (xprev - coef2*x_t) / coef1
-            _extract_into_tensor(1.0 / self.posterior_mean_coef1, t, x_t.shape) * xprev
+            _extract_into_tensor(1.0 / self.select('posterior_mean_coef1'), t, x_t.shape) * xprev
             - _extract_into_tensor(
-                self.posterior_mean_coef2 / self.posterior_mean_coef1, t, x_t.shape
+                self.select('posterior_mean_coef2') / self.select('posterior_mean_coef1'), t, x_t.shape
             )
             * x_t
         )
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         return (
-            _extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
+            _extract_into_tensor(self.select('sqrt_recip_alphas_cumprod'), t, x_t.shape) * x_t
             - pred_xstart
-        ) / _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
+        ) / _extract_into_tensor(self.select('sqrt_recipm1_alphas_cumprod'), t, x_t.shape)
 
     def condition_mean(self, cond_fn, p_mean_var, x, t, model_kwargs=None):
         """
@@ -594,7 +673,7 @@ class GaussianDiffusionSeg(ABC):
         Unlike condition_mean(), this instead uses the conditioning strategy
         from Song et al (2020).
         """
-        alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
+        alpha_bar = _extract_into_tensor(self.select('alphas_cumprod'), t, x.shape)
 
         eps = self._predict_eps_from_xstart(x, t, p_mean_var["pred_xstart"])
         eps = eps - (1 - alpha_bar).sqrt() * cond_fn(x, t, **model_kwargs)
@@ -604,8 +683,11 @@ class GaussianDiffusionSeg(ABC):
         out["mean"], _, _ = self.q_posterior_mean_variance(x_start=out["pred_xstart"], x_t=x, t=t)
 
     def _scale_timesteps(self, t):
+        if not self.training:
+            map_tensor = torch.tensor(self.timestep_map, device=t.device, dtype=t.dtype)
+            t = map_tensor[t]
         if self.rescale_timesteps:
-            return t.float() * (1000.0 / self.num_timesteps)
+            return t.float() * (self.rescale_timesteps / self.num_timesteps)
         return t
 
     def p_sample(
@@ -720,7 +802,7 @@ class GaussianDiffusionSeg(ABC):
             img = noise
         else:
             img = torch.randn(*shape, device=device)
-        indices = list(range(self.num_timesteps if not start_step else start_step))[::-1]
+        indices = list(range(self.select('num_timesteps') if not start_step else start_step))[::-1]
 
         if progress:
             # Lazy import so that we don't depend on tqdm.
@@ -779,8 +861,8 @@ class GaussianDiffusionSeg(ABC):
         # Usually our model outputs epsilon, but we re-derive it
         # in case we used x_start or x_prev prediction.
         eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
-        alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
-        alpha_bar_prev = _extract_into_tensor(self.alphas_cumprod_prev, t, x.shape)
+        alpha_bar = _extract_into_tensor(self.select('alphas_cumprod'), t, x.shape)
+        alpha_bar_prev = _extract_into_tensor(self.select('alphas_cumprod_prev'), t, x.shape)
         sigma = (
             eta
             * torch.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar))
@@ -826,10 +908,10 @@ class GaussianDiffusionSeg(ABC):
         # Usually our model outputs epsilon, but we re-derive it
         # in case we used x_start or x_prev prediction.
         eps = (
-            _extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x.shape) * x
+            _extract_into_tensor(self.select('sqrt_recip_alphas_cumprod'), t, x.shape) * x
             - out["pred_xstart"]
-        ) / _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x.shape)
-        alpha_bar_next = _extract_into_tensor(self.alphas_cumprod_next, t, x.shape)
+        ) / _extract_into_tensor(self.select('sqrt_recipm1_alphas_cumprod'), t, x.shape)
+        alpha_bar_next = _extract_into_tensor(self.select('alphas_cumprod_next'), t, x.shape)
 
         # Equation 12. reversed
         mean_pred = (
@@ -899,7 +981,7 @@ class GaussianDiffusionSeg(ABC):
             img = noise
         else:
             img = torch.randn(*shape, device=device)
-        indices = list(range(self.num_timesteps))[::-1]
+        indices = list(range(self.select('num_timesteps')))[::-1]
 
         if progress:
             # Lazy import so that we don't depend on tqdm.
