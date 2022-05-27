@@ -458,7 +458,7 @@ class GaussianDiffusionSeg(ABC):
                 last_alpha_cumprod = alpha_cumprod
                 self.timestep_map.append(i)
         self.inference_sampler=type('inference_sampler',(),{})
-        apply_betas(self.inference_sampler,new_betas)
+        apply_betas(self.inference_sampler,np.array(new_betas))
     
     def select(self,name):
         if self.training:
