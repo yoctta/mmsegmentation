@@ -76,7 +76,7 @@ model = dict(
         loss_type="MSE",
         ignore_class=255,
         num_classes=150,
-        timestep_respacing="ddim100"
+        timestep_respacing="ddim20"
     )
     )
 
