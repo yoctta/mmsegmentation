@@ -975,7 +975,7 @@ class GaussianDiffusionSeg(ABC):
         Same usage as p_sample_loop_progressive().
         """
         if device is None:
-            device = next(model.parameters()).device
+            device = next(self.parameters()).device
         assert isinstance(shape, (tuple, list))
         if noise is not None:
             img = noise
