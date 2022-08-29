@@ -132,13 +132,14 @@ class GaussianDiffusionEncoderDecoder(BaseSegmentor,GaussianDiffusionSeg):
             progress=False,
             eta=0.0,
         )
-        out = torch.softmax(out,dim=1)
-        out = resize(
-            input=out,
-            size=img.shape[2:],
-            mode='bilinear',
-            align_corners=self.align_corners)
-        return torch.softmax(out,dim=1)
+        #out = torch.softmax(out,dim=1)
+        if out.shape[2:] != img.shape[2:]:
+            out = resize(
+                input=out,
+                size=img.shape[2:],
+                mode='bilinear',
+                align_corners=self.align_corners)
+        return out #torch.softmax(out,dim=1)
 
 
     def _auxiliary_head_forward_train(self, x, img_metas, gt_semantic_seg):

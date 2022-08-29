@@ -5,4 +5,5 @@ from .encoder_decoder import EncoderDecoder
 from .diffusion_encoder_decoder import DiffusionEncoderDecoder
 from .diffusion_encoder_decoder_uncertainty import DiffusionEncoderDecoderUC
 from .gaussian_diffusion_encoder_decoder import GaussianDiffusionEncoderDecoder
-__all__ = ['BaseSegmentor', 'EncoderDecoder', 'CascadeEncoderDecoder','DiffusionEncoderDecoder', 'DiffusionEncoderDecoderUC', 'GaussianDiffusionEncoderDecoder']
+from .Analogbits_encoder_decoder import AnalogBitsEncoderDecoder
+__all__ = ['BaseSegmentor', 'EncoderDecoder', 'CascadeEncoderDecoder','DiffusionEncoderDecoder', 'DiffusionEncoderDecoderUC', 'GaussianDiffusionEncoderDecoder','AnalogBitsEncoderDecoder']
