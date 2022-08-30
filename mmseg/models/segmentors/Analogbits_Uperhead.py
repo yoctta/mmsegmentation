@@ -10,7 +10,7 @@ class Uper_decode_head(BaseModule):
 
     def __init__(self, pool_scales=(1, 2, 3, 6), **kwargs):
         # PSP Module
-        super().__init__(dict(type='Normal', std=0.01, override=dict(name='conv_seg')))
+        super().__init__(dict(type='Normal', std=0.01))
         for i in kwargs:
             setattr(self,i,kwargs[i])
         self.neck=builder.build_neck(dict(type='Feature2Pyramid',embed_dim=self.channels,rescales=[4, 2, 1, 0.5],norm_cfg=dict(type='SyncBN', requires_grad=True)))
