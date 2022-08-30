@@ -47,7 +47,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
                  **kwargs):
         BaseSegmentor.__init__(self,init_cfg)
         self.real_num_classes=auxiliary_head['num_classes']
-        self.num_bits=np.ceil(np.log(self.real_num_classes))
+        self.num_bits=int(np.ceil(np.log(self.real_num_classes)))
         self.register_buffer('bit_mask',torch.tensor([2**i for i in range(self.num_bits)][::-1]))
         self.register_buffer('bit_emb',torch.tensor([ num2nb(i,self.num_bits) for i in range(self.real_num_classes)]))
         ABGaussianDiffusionSeg.__init__(self,**diffusion_cfg)
