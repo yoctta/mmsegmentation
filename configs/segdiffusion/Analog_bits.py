@@ -2,7 +2,7 @@ _base_ = [
      '../_base_/datasets/ade20k_512x512_dong.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
 ]
-
+data_root = '/mnt/data/ADEChallengeData2016'
 model = dict(
     type='AnalogBitsEncoderDecoder',
     backbone=dict(
