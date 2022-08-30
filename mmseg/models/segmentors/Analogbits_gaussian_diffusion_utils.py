@@ -1203,11 +1203,14 @@ class ABGaussianDiffusionSeg(ABC):
             self, 
             batch=None, 
             t=None,
+            gt_seg=None,
             **kwargs):
         t, weights = self.schedule_sampler.sample(batch['seg'].shape[0],batch['seg'].device)
         terms = self.training_losses(batch['seg'],t=t,model_kwargs=dict(image=batch['image']))
         out = {}
-        loss= torch.mean(terms['loss'],dim=[1,2,3])
+        mask_region = (gt_seg == self.ignore_class).float()
+        loss = terms['loss'] * (1-mask_region)
+        loss= torch.mean(loss,dim=[1,2,3])
         if isinstance(self.schedule_sampler, LossAwareSampler):
                 self.schedule_sampler.update_with_local_losses(t, loss.detach())
         out['loss'] = torch.mean(loss*weights)

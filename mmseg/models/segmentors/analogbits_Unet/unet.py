@@ -344,12 +344,12 @@ class UNet(nn.Module):
 
     def __init__(
         self,
-        image_size,
-        in_channel,
-        inner_channel,
-        out_channel,
-        res_blocks,
-        attn_res,
+        image_size=(512,512),
+        in_channel=3,
+        inner_channel=64,
+        out_channel=3,
+        res_blocks=2,
+        attn_res=(8,),
         dropout=0,
         channel_mults=(1, 2, 4, 8),
         conv_resample=True,
@@ -555,6 +555,7 @@ class UNet(nn.Module):
         return self.out(h)
 
     def feature_inject(self,x1,x2):
+        #print(x1.shape,x2.shape)
         scale, shift = torch.chunk(x2, 2, dim=1)
         h = x1 * (1 + scale) + shift
         return h

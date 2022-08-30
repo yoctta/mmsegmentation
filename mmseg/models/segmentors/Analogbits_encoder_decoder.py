@@ -36,9 +36,9 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
     """
 
     def __init__(self,
-                 backbone,
-                 mask_Unet,
-                 decode_head,
+                 backbone=None,
+                 mask_Unet=None,
+                 decode_head=None,
                  auxiliary_head=None,
                  train_cfg=None,
                  test_cfg=None,
@@ -47,7 +47,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
                  **kwargs):
         BaseSegmentor.__init__(self,init_cfg)
         self.real_num_classes=auxiliary_head['num_classes']
-        self.num_bits=int(np.ceil(np.log(self.real_num_classes)))
+        self.num_bits=int(np.ceil(np.log2(self.real_num_classes)))
         self.register_buffer('bit_mask',torch.tensor([2**i for i in range(self.num_bits)][::-1]))
         self.register_buffer('bit_emb',torch.tensor([ num2nb(i,self.num_bits) for i in range(self.real_num_classes)]))
         ABGaussianDiffusionSeg.__init__(self,**diffusion_cfg)
@@ -82,10 +82,10 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
 
     def _init_mask_Unet(self,mask_Unet,diffusion_cfg):
         """the model encodes mask x_(t-1) to mask features, the model depends on t"""
-        mask_Unet['diffusion_step']=diffusion_cfg['diffusion_step']
+        #mask_Unet['diffusion_step']=diffusion_cfg['diffusion_step']
         mask_Unet['in_channel']=self.num_bits if not diffusion_cfg['use_self_condition'] else self.num_bits*2
         mask_Unet['out_channel']=self.num_bits
-        self.mask_Unet=Analogbits_Unet(mask_Unet)
+        self.mask_Unet=Analogbits_Unet(**mask_Unet)
 
     def _init_auxiliary_head(self, auxiliary_head):
         """the uxiliary head use only image features for predict mask"""
@@ -99,7 +99,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
 
     def _init_decode_head(self, decode_head):
         """the decode head use mixed mask and image features for predict mask, the model doesn't depend on t, so we can use mmseg models"""
-        self.decode_head = Uper_decode_head(decode_head)
+        self.decode_head = Uper_decode_head(**decode_head)
         self.align_corners = self.decode_head.align_corners
 
     def _model(self ,x_t, t, **model_kwargs):
@@ -209,7 +209,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
         self.use_cache=True
         losses = dict()
         gt_bits=self.mask_to_bits(gt_semantic_seg.squeeze(1))
-        loss_decode = self.train_loss(batch=dict(image=img,seg=gt_bits),return_loss=True)
+        loss_decode = self.train_loss(batch=dict(image=img,seg=gt_bits),return_loss=True,gt_seg=gt_semantic_seg)
         losses.update(loss_decode)
         if self.with_auxiliary_head:
             loss_aux = self._auxiliary_head_forward_train(self._backbone_feature, img_metas, gt_semantic_seg)

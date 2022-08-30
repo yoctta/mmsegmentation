@@ -24,12 +24,12 @@ model = dict(
         norm_eval=False,
         init_values=0.1),
     mask_Unet=dict(
-        img_size=(512, 512),
+        image_size=(512, 512),
         inner_channel=64,
         res_blocks=2,
-        attn_res=[16,32,64],
+        attn_res=[16,32],
         dropout=0,
-        channel_mults=(1,1,2,4,8,8,16), # 512 256 128 64 32 16 8
+        channel_mults=(1,1,2,4,8,16), # 512 256 128 64 32 16
         conv_resample=True,
         use_checkpoint=False,
         use_fp16=False,
@@ -39,7 +39,7 @@ model = dict(
         use_scale_shift_norm=True,
         resblock_updown=True,
         use_new_attention_order=False,
-        in_feasture_res=[8,16,32,64]
+        in_feasture_res=[4,8,16,32]
     ),
     decode_head=dict(
         in_channels=[768, 768, 768, 768],
@@ -51,7 +51,7 @@ model = dict(
         conv_cfg=None,
         act_cfg=dict(type='ReLU'),
         align_corners=False,
-        out_channels=(256,512,512,1024),
+        out_channels=(64,128,256,512),
     ),
     auxiliary_head=dict(
         type='FCNHead',
