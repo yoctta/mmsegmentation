@@ -25,7 +25,7 @@ model = dict(
         init_values=0.1),
     mask_Unet=dict(
         image_size=(512, 512),
-        inner_channel=128,
+        inner_channel=96,
         res_blocks=2,
         attn_res=[16,32],
         dropout=0,
@@ -50,8 +50,7 @@ model = dict(
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         conv_cfg=None,
         act_cfg=dict(type='ReLU'),
-        align_corners=False,
-        out_channels=(128,256,512,1024),
+        align_corners=False
     ),
     auxiliary_head=dict(
         type='FCNHead',

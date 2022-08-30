@@ -54,6 +54,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
         self.backbone = builder.build_backbone(backbone)
         self._init_mask_Unet(mask_Unet,diffusion_cfg)
         self._init_auxiliary_head(auxiliary_head)
+        decode_head['out_channels']=(i*mask_Unet['inner_channel'] for i in mask_Unet['channel_mults'][2:6])
         self._init_decode_head(decode_head)
         self.neck=builder.build_neck(dict(type='Feature2Pyramid',embed_dim=decode_head['channels'],rescales=[4, 2, 1, 0.5],norm_cfg=dict(type='SyncBN', requires_grad=True)))
         self.train_cfg = train_cfg
