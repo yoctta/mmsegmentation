@@ -203,7 +203,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
 
         self.use_cache=True
         losses = dict()
-        gt_bits=self.mask_to_bits(gt_semantic_seg.squeeze(1))
+        gt_bits=self.mask_to_bits(torch.clamp(gt_semantic_seg,0,self.real_num_classes-1).squeeze(1))
         loss_decode = self.train_loss(batch=dict(image=img,seg=gt_bits),return_loss=True,gt_seg=gt_semantic_seg)
         losses.update(loss_decode)
         if self.with_auxiliary_head:
