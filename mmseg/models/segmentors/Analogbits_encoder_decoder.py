@@ -55,6 +55,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
         self._init_mask_Unet(mask_Unet,diffusion_cfg)
         self._init_auxiliary_head(auxiliary_head)
         self._init_decode_head(decode_head)
+        self.neck=builder.build_neck(dict(type='Feature2Pyramid',embed_dim=decode_head['channels'],rescales=[4, 2, 1, 0.5],norm_cfg=dict(type='SyncBN', requires_grad=True)))
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
         self.use_cache=False
@@ -73,12 +74,6 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
     def quantize_logits(self,bits):
         dist=torch.sum((bits.unsqueeze(1)-einops.rearrange(self.bit_emb,'n k -> 1 n k 1 1'))**2,dim=2) # b n h w
         return -dist
-
-
-    def _init_mask_backbone(self,mask_backbone,diffusion_cfg):
-        """the model encodes mask x_(t-1) to mask features, the model depends on t"""
-        mask_backbone['diffusion_step']=diffusion_cfg['diffusion_step']
-        self.mask_backbone=builder.build_head(mask_backbone)
 
     def _init_mask_Unet(self,mask_Unet,diffusion_cfg):
         """the model encodes mask x_(t-1) to mask features, the model depends on t"""
@@ -109,11 +104,11 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
             if self.cache is not None:
                image_features=self.cache
             else:
-                self._backbone_feature=self.backbone(im)
+                self._backbone_feature=self.neck(self.backbone(im))
                 image_features=self.decode_head(self._backbone_feature)
                 self.cache=image_features
         else:
-            image_features=self.decode_head(self.backbone(im))
+            image_features=self.decode_head(self.neck(self.backbone(im)))
         # mask_features=self.mask_backbone(x_t,t)
         # mixed_features=self.feature_mixer(image_features,mask_features,t)
         # output=self.decode_head(mixed_features)

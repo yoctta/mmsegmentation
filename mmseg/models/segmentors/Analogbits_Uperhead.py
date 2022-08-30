@@ -13,7 +13,6 @@ class Uper_decode_head(BaseModule):
         super().__init__(dict(type='Normal', std=0.01))
         for i in kwargs:
             setattr(self,i,kwargs[i])
-        self.neck=builder.build_neck(dict(type='Feature2Pyramid',embed_dim=self.channels,rescales=[4, 2, 1, 0.5],norm_cfg=dict(type='SyncBN', requires_grad=True)))
         self.psp_modules = PPM(
             pool_scales,
             self.in_channels[-1],
@@ -88,7 +87,6 @@ class Uper_decode_head(BaseModule):
             feats (Tensor): A tensor of shape (batch_size, self.channels,
                 H, W) which is feature map for last layer of decoder head.
         """
-        inputs=self.neck(inputs)
         assert len(inputs)==4
         assert inputs[0].shape[1:]==(768,128,128) #1/4, 1/8, 1/16, 1/32
         assert inputs[3].shape[1:]==(768,16,16)
