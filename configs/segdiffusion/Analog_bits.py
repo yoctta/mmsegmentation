@@ -2,12 +2,12 @@ _base_ = [
      '../_base_/datasets/ade20k_512x512_dong.py',
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py'
 ]
-data_root = 'data/ade/ADEChallengeData2016' #'/mnt/data/ADEChallengeData2016'
+data_root = '/mnt/data/ADEChallengeData2016' # 'data/ade/ADEChallengeData2016'
 model = dict(
     type='AnalogBitsEncoderDecoder',
     backbone=dict(
         type='BEiT',
-        init_cfg=dict(type='Pretrained', checkpoint='pretrain/beit_peco_fine_800.pth'), #'pretrain/peco_800/iter_160000.pth'
+        init_cfg=dict(type='Pretrained', checkpoint='pretrain/peco_800/iter_160000.pth'), # 'pretrain/beit_peco_fine_800.pth'
         img_size=(512, 512),
         patch_size=16,
         in_channels=3,
@@ -25,7 +25,7 @@ model = dict(
         init_values=0.1),
     mask_Unet=dict(
         image_size=(512, 512),
-        inner_channel=64,
+        inner_channel=128,
         res_blocks=2,
         attn_res=[16,32],
         dropout=0,
@@ -51,7 +51,7 @@ model = dict(
         conv_cfg=None,
         act_cfg=dict(type='ReLU'),
         align_corners=False,
-        out_channels=(64,128,256,512),
+        out_channels=(128,256,512,1024),
     ),
     auxiliary_head=dict(
         type='FCNHead',
