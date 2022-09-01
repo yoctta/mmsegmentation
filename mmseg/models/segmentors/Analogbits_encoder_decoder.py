@@ -154,7 +154,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
         # )
         out = self.ddim_sample_loop(
             self._model,
-            [B,self.num_classes,H,W],
+            [B,self.num_bits,H,W],
             noise=None,
             clip_denoised=True,
             denoised_fn=None,
