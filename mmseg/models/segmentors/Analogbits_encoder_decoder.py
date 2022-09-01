@@ -46,10 +46,10 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
                  diffusion_cfg=None,
                  **kwargs):
         BaseSegmentor.__init__(self,init_cfg)
-        self.real_num_classes=auxiliary_head['num_classes']
-        self.num_bits=int(np.ceil(np.log2(self.real_num_classes)))
+        self.num_classes=auxiliary_head['num_classes']
+        self.num_bits=int(np.ceil(np.log2(self.num_classes)))
         self.register_buffer('bit_mask',torch.tensor([2**i for i in range(self.num_bits)][::-1]))
-        self.register_buffer('bit_emb',torch.tensor([ num2nb(i,self.num_bits) for i in range(self.real_num_classes)]))
+        self.register_buffer('bit_emb',torch.tensor([ num2nb(i,self.num_bits) for i in range(self.num_classes)]))
         ABGaussianDiffusionSeg.__init__(self,**diffusion_cfg)
         self.backbone = builder.build_backbone(backbone)
         self._init_mask_Unet(mask_Unet,diffusion_cfg)
@@ -204,7 +204,7 @@ class AnalogBitsEncoderDecoder(BaseSegmentor,ABGaussianDiffusionSeg):
 
         self.use_cache=True
         losses = dict()
-        gt_bits=self.mask_to_bits(torch.clamp(gt_semantic_seg,0,self.real_num_classes-1).squeeze(1))
+        gt_bits=self.mask_to_bits(torch.clamp(gt_semantic_seg,0,self.num_classes-1).squeeze(1))
         loss_decode = self.train_loss(batch=dict(image=img,seg=gt_bits),return_loss=True,gt_seg=gt_semantic_seg)
         losses.update(loss_decode)
         if self.with_auxiliary_head:
